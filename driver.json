@@ -1,0 +1,45 @@
+{
+	"driver_id": "jvc_projector_driver",
+	"version": "0.1.0",
+	"min_core_api": "0.9.0",
+	"name": { "en": "JVC Projector" },
+	"icon": "uc:projector",
+	"description": {
+		"en": "Control your network connected JVC Projector"
+	},
+	"developer": {
+		"name": "Jack Powell",
+		"email": "jackjpowell@gmail.com",
+		"url": "https://github.com/jackjpowell"
+	},
+	"home_page": "https://github.com/jackjpowell/ucr2-integration-jvc",
+	"setup_data_schema": {
+		"title": {
+			"en": "Integration setup"
+		},
+		"settings": [
+		{  
+			"id": "name",
+			"label": {
+				"en": "Projector Name"
+				},
+			"field": {"text": {"value": ""}}
+		},
+		{  
+			"id": "ip",
+			"label": {
+				"en": "IP Address"
+				},
+			"field": {"text": {"value": ""}}
+		},
+		{  
+			"id": "password",
+			"label": {
+				"en": "Password (If set on your projector)"
+				},
+			"field": {"text": {"value": ""}}
+		}
+      ]
+	},
+	"release_date": "2024-12-15"
+}
