@@ -3,7 +3,8 @@
 name: "Build & Draft Release"
 
 on:
-  workflow_dispatch:
+  release:
+    types: [published]
 
 env:
   INTG_NAME: jvc
