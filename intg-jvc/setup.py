@@ -12,6 +12,7 @@ from jvc_projector_remote import JVCProjector, JVCCannotConnectError
 import config
 import driver
 import media_player
+import remote
 
 _LOG = logging.getLogger(__name__)
 
@@ -74,7 +75,12 @@ async def handle_driver_setup(
         try:
             _LOG.debug(ip)
             projector = JVCProjector(
-                ip, password=password, port=20554, delay_ms=600, connect_timeout=10, max_retries=10
+                ip,
+                password=password,
+                port=20554,
+                delay_ms=600,
+                connect_timeout=10,
+                max_retries=10,
             )
             mac = projector.get_mac()
             config.Setup.set("ip", ip)
@@ -93,12 +99,16 @@ async def handle_driver_setup(
     try:
         mp_entity_id = config.Setup.get("id")
         mp_entity_name = config.Setup.get("name")
+        rt_entity_id = "remote-"+mp_entity_id
+        config.Setup.set("rt-id", rt_entity_id)
+        rt_entity_name = mp_entity_name
     except ValueError as v:
         _LOG.error(v)
         return ucapi.SetupError()
 
     await media_player.add_mp(mp_entity_id, mp_entity_name)
     await media_player.create_mp_poller(mp_entity_id, ip)
+    await remote.add_remote(rt_entity_id, rt_entity_name)
 
     config.Setup.set("setup_complete", True)
     _LOG.info("Setup complete")

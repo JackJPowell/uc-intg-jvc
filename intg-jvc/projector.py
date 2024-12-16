@@ -14,21 +14,22 @@ _LOG = logging.getLogger(__name__)
 
 
 class Projector:
-    def __init__(
-        self,
-        address=str,
-        password:str | None = None
-    ) -> None:
+    def __init__(self, address=str, password: str | None = None) -> None:
         self._address = address
         self._client = JVCProjector(
-            self._address, password=password, port=20554, delay_ms=600, connect_timeout=10, max_retries=10
+            self._address,
+            password=password,
+            port=20554,
+            delay_ms=600,
+            connect_timeout=10,
+            max_retries=10,
         )
 
     def get_attr_power(self):
         """Get the current power state from the projector and return the corresponding ucapi power state attribute"""
         try:
             power = self._client.command("power")
-            _LOG.debug("Power State: %s",power)
+            _LOG.debug("Power State: %s", power)
             if power == "lamp_on":
                 return ucapi.media_player.States.ON
             return ucapi.media_player.States.OFF

@@ -82,7 +82,7 @@ async def add_mp(ent_id: str, name: str):
     _LOG.info("Added projector media player entity")
 
 
-async def create_mp_poller(ent_id: str, ip: str, password: str | None=None):
+async def create_mp_poller(ent_id: str, ip: str, password: str | None = None):
     """Creates a task to regularly poll attributes from the projector"""
 
     mp_poller_interval = config.Setup.get("mp_poller_interval")
@@ -104,7 +104,9 @@ async def create_mp_poller(ent_id: str, ip: str, password: str | None=None):
         )
 
 
-async def mp_poller(entity_id: str, interval: int, ip: str, password: str | None=None) -> None:
+async def mp_poller(
+    entity_id: str, interval: int, ip: str, password: str | None = None
+) -> None:
     """Projector attributes poller task"""
     while True:
         await driver.asyncio.sleep(interval)
@@ -126,7 +128,9 @@ async def update_mp(entity_id: str, ip: str, password: str | None = None):
         source = None
         api = Projector(ip, password)
         state = api.get_attr_power()
-        _LOG.debug("Projector State: %s - UC State on: %s",state, ucapi.media_player.States.ON)
+        _LOG.debug(
+            "Projector State: %s - UC State on: %s", state, ucapi.media_player.States.ON
+        )
         if state == ucapi.media_player.States.ON:
             source = api.get_attr_source()
     except Exception as e:
@@ -154,7 +158,7 @@ async def update_mp(entity_id: str, ip: str, password: str | None = None):
 
     attributes_to_check = ["state"]
     if state == ucapi.media_player.States.ON:
-        attributes_to_check.append('source')
+        attributes_to_check.append("source")
     attributes_to_update = []
     attributes_to_skip = []
 
@@ -179,9 +183,12 @@ async def update_mp(entity_id: str, ip: str, password: str | None = None):
             attributes_to_send.update({ucapi.media_player.Attributes.SOURCE: source})
 
         try:
-            api_update_attributes = driver.api.configured_entities.update_attributes(
-                entity_id, attributes_to_send
-            )
+            if attributes_to_send:
+                api_update_attributes = driver.api.configured_entities.update_attributes(
+                    entity_id, attributes_to_send
+                )
+            else:
+                _LOG.debug("Nothing to update")
         except Exception as e:
             raise Exception(
                 "Error while updating attributes for entity id " + entity_id

@@ -2,16 +2,23 @@
 
 Using [uc-integration-api](https://github.com/aitatoi/integration-python-library)
 
-The driver lets you enter the IP address of your JVC Projector and control it via the Remote Two.
+The driver lets you enter the IP address of your JVC Projector and control it via your Unfolded Circle Remote.
 
+## Media Player
 Supported attributes:
-- State (on, standby, playing, paused, seeking, buffering, unknown)
+- State
+- Input
 
 Supported commands:
-- Turn on & off (device will be put into standby)
+- Turn on & off
 - Back
 - Directional pad navigation and select
 - Top menu
+- All supported JVC commands
+
+## Remote
+- Preconfigured UI with all available JVC Projector commands
+- Preconfigured button layout to navigate the projector's UI
 
 ## Usage
 ### Setup
@@ -45,14 +52,9 @@ docker build .
 ## Versioning
 
 We use [SemVer](http://semver.org/) for versioning. For the versions available, see the
-[tags and releases in this repository](https://github.com/jackjpowell/ucr2-integration-jvc/releases).
+[tags and releases in this repository](https://github.com/jackjpowell/uc-intg-jvc/releases).
 
 ## Changelog
 
 The major changes found in each new release are listed in the [changelog](CHANGELOG.md)
-and under the GitHub [releases](https://github.com/jackjpowell/ucr2-integration-jvc/releases).
-
-## License
-
-This project is licensed under the [**Mozilla Public License 2.0**](https://choosealicense.com/licenses/mpl-2.0/).
-See the [LICENSE](LICENSE) file for details.
+and under the GitHub [releases](https://github.com/jackjpowell/uc-intg-jvc/releases).

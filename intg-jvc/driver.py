@@ -13,6 +13,7 @@ import ucapi
 import config
 import setup
 import media_player
+import remote
 
 _LOG = logging.getLogger("driver")
 
@@ -35,6 +36,9 @@ async def startcheck():
         try:
             mp_entity_id = config.Setup.get("id")
             mp_entity_name = config.Setup.get("name")
+            rt_entity_id = "remote-" + mp_entity_id
+            config.Setup.set("rt-id", rt_entity_id)
+            rt_entity_name = mp_entity_name
             try:
                 mp_entity_password = config.Setup.get("password")
             except ValueError:
@@ -44,12 +48,20 @@ async def startcheck():
 
         if api.available_entities.contains(mp_entity_id):
             _LOG.debug(
-                "Projector media player entity with id "
-                + mp_entity_id
-                + " is already in storage as available entity"
+                "Projector media player entity with id %s is already in storage as available entity",
+                mp_entity_id,
             )
         else:
             await media_player.add_mp(mp_entity_id, mp_entity_name)
+
+        _LOG.debug("Remote Entity ID: %s", rt_entity_id)
+        if api.available_entities.contains(rt_entity_id):
+            _LOG.debug(
+                "Projector remote entity with id %s is already in storage as available entity",
+                rt_entity_id,
+            )
+        else:
+            await remote.add_remote(rt_entity_id, rt_entity_name)
 
 
 @api.listens_to(ucapi.Events.CONNECT)
@@ -100,9 +112,9 @@ async def on_r2_disconnect() -> None:
                 try:
                     await poller_task
                 except asyncio.CancelledError:
-                    _LOG.debug("Stopped " + task_name + " task")
+                    _LOG.debug("Stopped %s task", task_name)
             except ValueError:
-                _LOG.debug(task_name + " task is not running")
+                _LOG.debug("%s task is not running", task_name)
 
     await api.set_device_state(ucapi.DeviceStates.DISCONNECTED)
 
@@ -145,11 +157,15 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
     config.Setup.set("standby", False)
     ip = config.Setup.get("ip")
     mp_entity_id = config.Setup.get("id")
+    rt_entity_id = config.Setup.get("rt-id")
 
     for entity_id in entity_ids:
         try:
             if entity_id == mp_entity_id:
                 await media_player.update_mp(entity_id, ip)
+            if entity_id == rt_entity_id:
+                await remote.update_rt(rt_entity_id, ip)
+                _LOG.debug("Updating Remote: %s", entity_id)
         except OSError as o:
             _LOG.critical(o)
         except Exception as e:
@@ -180,7 +196,6 @@ def setup_logger():
     logging.getLogger("projector").setLevel(level)
     logging.getLogger("media_player").setLevel(level)
     logging.getLogger("remote").setLevel(level)
-    logging.getLogger("sensor").setLevel(level)
 
 
 async def main():
@@ -198,7 +213,7 @@ async def main():
 
         cfg_path = os.environ["UC_CONFIG_HOME"] + "/config.json"
         config.Setup.set("cfg_path", cfg_path)
-        _LOG.info("The configuration is stored in " + cfg_path)
+        _LOG.info("The configuration is stored in %s", cfg_path)
 
         _LOG.info(
             "Deactivating projector attributes poller to reduce battery consumption when running on the remote"

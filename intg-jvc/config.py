@@ -81,28 +81,15 @@ class MpDef:
     options = {ucapi.media_player.Options.SIMPLE_COMMANDS: simple_commands}
 
 
-# class RemoteDef:
-#     """Remote entity definition class that includes the features, attributes and simple commands"""
-#     features = [
-#         ucapi.remote.Features.ON_OFF,
-#         ucapi.remote.Features.TOGGLE,
-#         ]
-#     attributes = {
-#         ucapi.remote.Attributes.STATE: ucapi.remote.States.UNKNOWN
-#         }
-#     simple_commands = simple_commands
+class RemoteDef:
+    """Remote entity definition class that includes the features, attributes and simple commands"""
 
-
-# class LTSensorDef:
-#     """Lamp timer sensor entity definition class that includes the device class, attributes and options"""
-#     device_class = ucapi.sensor.DeviceClasses.CUSTOM
-#     attributes = {
-#         ucapi.sensor.Attributes.STATE: ucapi.sensor.States.ON,
-#         ucapi.sensor.Attributes.UNIT: "h"
-#         }
-#     options = {
-#         ucapi.sensor.Options.CUSTOM_UNIT: "h"
-#         }
+    features = [
+        ucapi.remote.Features.ON_OFF,
+        ucapi.remote.Features.TOGGLE,
+    ]
+    attributes = {ucapi.remote.Attributes.STATE: ucapi.remote.States.UNKNOWN}
+    simple_commands = simple_commands
 
 
 class Setup:
@@ -113,7 +100,7 @@ class Setup:
         "ip": "",
         "id": "",
         "name": "",
-        "password":"",
+        "password": "",
         "setup_complete": False,
         "setup_reconfigure": False,
         "standby": False,
@@ -132,6 +119,7 @@ class Setup:
         "bundle_mode",
         "mp_poller_interval",
         "cfg_path",
+        "rt-id",
     ]
     __storers = [
         "setup_complete",
@@ -160,9 +148,7 @@ class Setup:
                 )
             else:
                 Setup.__conf[key] = value
-                _LOG.debug(
-                    "Stored " + key + ": " + str(value) + " into runtime storage"
-                )
+                _LOG.debug("Stored %s: %s into runtime storage", key, str(value))
 
                 # Store key/value pair in config file
                 if key in Setup.__storers:
@@ -178,23 +164,19 @@ class Setup:
                                 f.truncate()  # Needed when the new value has less characters than the old value (e.g. false to true)
                                 json.dump(l, f)
                                 _LOG.debug(
-                                    "Stored "
-                                    + key
-                                    + ": "
-                                    + str(value)
-                                    + " into "
-                                    + Setup.__conf["cfg_path"]
+                                    "Stored %s: %s into %s",
+                                    key,
+                                    str(value),
+                                    Setup.__conf["cfg_path"],
                                 )
                         except OSError as o:
                             raise OSError(o) from o
                         except Exception as e:
                             raise Exception(
-                                "Error while storing "
-                                + key
-                                + ": "
-                                + str(value)
-                                + " into "
-                                + Setup.__conf["cfg_path"]
+                                "Error while storing %s: %s into %s",
+                                key,
+                                str(value),
+                                Setup.__conf["cfg_path"],
                             ) from e
 
                     # Create config file first if it doesn't exists yet
@@ -207,28 +189,24 @@ class Setup:
                                 ) as f:
                                     json.dump(jsondata, f)
                                 _LOG.debug(
-                                    "Stored "
-                                    + key
-                                    + ": "
-                                    + str(value)
-                                    + " into "
-                                    + Setup.__conf["cfg_path"]
+                                    "Stored %s: %s into %s",
+                                    key,
+                                    str(value),
+                                    Setup.__conf["cfg_path"],
                                 )
                             except OSError as o:
                                 raise OSError(o) from o
                             except Exception as e:
                                 raise Exception(
-                                    "Error while storing "
-                                    + key
-                                    + ": "
-                                    + str(value)
-                                    + " into "
-                                    + Setup.__conf["cfg_path"]
+                                    "Error while storing %s: %s into %s",
+                                    key,
+                                    str(value),
+                                    Setup.__conf["cfg_path"],
                                 ) from e
                 else:
                     _LOG.debug(
-                        key
-                        + " not found in __storers because it should not be stored in the config file"
+                        "%s not found in __storers because it should not be stored in the config file",
+                        key,
                     )
         else:
             raise NameError(
@@ -249,10 +227,9 @@ class Setup:
 
             Setup.__conf["setup_complete"] = configfile["setup_complete"]
             _LOG.debug(
-                "Loaded setup_complete: "
-                + str(configfile["setup_complete"])
-                + " into runtime storage from "
-                + Setup.__conf["cfg_path"]
+                "Loaded setup_complete: %s into runtime storage from %s",
+                str(configfile["setup_complete"]),
+                Setup.__conf["cfg_path"],
             )
 
             if not Setup.__conf["setup_complete"]:
@@ -263,8 +240,8 @@ class Setup:
                 if "ip" in configfile:
                     Setup.__conf["ip"] = configfile["ip"]
                     _LOG.debug(
-                        "Loaded ip into runtime storage from "
-                        + Setup.__conf["cfg_path"]
+                        "Loaded ip into runtime storage from %s",
+                        Setup.__conf["cfg_path"],
                     )
                 else:
                     _LOG.debug(
@@ -275,8 +252,8 @@ class Setup:
                     Setup.__conf["id"] = configfile["id"]
                     Setup.__conf["name"] = configfile["name"]
                     _LOG.debug(
-                        "Loaded id and name into runtime storage from "
-                        + Setup.__conf["cfg_path"]
+                        "Loaded id and name into runtime storage from %s",
+                        Setup.__conf["cfg_path"],
                     )
                 else:
                     _LOG.debug(
@@ -285,6 +262,6 @@ class Setup:
 
         else:
             _LOG.info(
-                Setup.__conf["cfg_path"]
-                + " does not exist (yet). Please start the setup process"
+                "%s does not exist (yet). Please start the setup process",
+                Setup.__conf["cfg_path"],
             )
