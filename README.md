@@ -21,40 +21,16 @@ Supported commands:
 - Preconfigured button layout to navigate the projector's UI
 
 ## Usage
-### Setup
+The simpliest way to get started is by uploading this integration to your unfolded circle remote. You'll find the option on the integration tab in the web configurator. Simply upload the .tar.gz file attached to the release. This option is nice and doesn't require a separate docker instance to host the package. However, upgrading is a fully manual process. To help with this, a docker image is also provided that allows you to run it externally from the remote and easily upgrade when new versions are released. 
 
-- Requires Python 3.11
-- Install required libraries:  
-  (using a [virtual environment](https://docs.python.org/3/library/venv.html) is highly recommended)
-```shell
-pip3 install -r requirements.txt
-```
+### Docker
+```docker run -d --name=uc-intg-jvc -p 9090:9090 --restart unless-stopped ghcr.io/jackjpowell/uc-intg-jvc:latest```
 
-### Run
-
-```shell
-python3 intg-jvc/driver.py
-```
-
-See available [environment variables](https://github.com/unfoldedcircle/integration-python-library#environment-variables)
-in the Python integration library to control certain runtime features like listening interface and configuration directory.
-
-The configuration file is loaded & saved from the path specified in the environment variable `UC_CONFIG_HOME`.
-Otherwise, the `HOME` path is used or the working directory as fallback.
-
-## Build Docker image
-
-Simply run:
-```shell
-docker build .
-```
-
-## Versioning
-
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the
-[tags and releases in this repository](https://github.com/jackjpowell/uc-intg-jvc/releases).
-
-## Changelog
-
-The major changes found in each new release are listed in the [changelog](CHANGELOG.md)
-and under the GitHub [releases](https://github.com/jackjpowell/uc-intg-jvc/releases).
+### Docker Compose
+```services:
+     uc-intg-jvc:
+       image: ghcr.io/jackjpowell/uc-intg-jvc:latest
+       container_name: uc-intg-jvc
+       ports:
+         - 9090:9090
+       restart: unless-stopped```
