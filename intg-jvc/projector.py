@@ -59,7 +59,7 @@ class Projector:
             case ucapi.media_player.Commands.ON:
                 try:
                     _LOG.debug("Prior to sending Power on command the assumed state is: %s", driver.api.configured_entities.get("state"))
-                    if not self._client.is_on:
+                    if not self._client.is_on():
                         _LOG.debug("The projector reported the state as off. Powering on.")
                         self._client.power_on()
                         _LOG.debug("Follow up debug statement after command power on send.")
@@ -75,7 +75,7 @@ class Projector:
             case ucapi.media_player.Commands.OFF:
                 try:
                     _LOG.debug("Prior to sending Power off command the assumed state is: %s", driver.api.configured_entities.get("state"))
-                    if self._client.is_on:
+                    if self._client.is_on():
                         _LOG.debug("The projector reported the state as on. Powering off.")
                         self._client.power_off()
                         _LOG.debug("Follow up debug statement after command power off send.")

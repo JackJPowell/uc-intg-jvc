@@ -1,6 +1,6 @@
 {
 	"driver_id": "jvc_projector_driver",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"min_core_api": "0.20.0",
 	"name": { "en": "JVC Projector" },
 	"icon": "uc:projector",
