@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bullseye
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
@@ -15,5 +15,6 @@ ENV UC_INTEGRATION_INTERFACE="0.0.0.0"
 ENV UC_INTEGRATION_HTTP_PORT="9090"
 
 ENV UC_CONFIG_HOME="/config"
+LABEL org.opencontainers.image.source https://github.com/jackjpowell/uc-intg-jvc
 
 CMD ["python3", "-u", "intg-jvc/driver.py"]
