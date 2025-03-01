@@ -99,7 +99,7 @@ async def handle_driver_setup(
     try:
         mp_entity_id = config.Setup.get("id")
         mp_entity_name = config.Setup.get("name")
-        rt_entity_id = "remote-"+mp_entity_id
+        rt_entity_id = "remote-" + mp_entity_id
         config.Setup.set("rt-id", rt_entity_id)
         rt_entity_name = mp_entity_name
     except ValueError as v:

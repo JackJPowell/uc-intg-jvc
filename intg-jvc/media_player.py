@@ -184,8 +184,10 @@ async def update_mp(entity_id: str, ip: str, password: str | None = None):
 
         try:
             if attributes_to_send:
-                api_update_attributes = driver.api.configured_entities.update_attributes(
-                    entity_id, attributes_to_send
+                api_update_attributes = (
+                    driver.api.configured_entities.update_attributes(
+                        entity_id, attributes_to_send
+                    )
                 )
             else:
                 _LOG.debug("Nothing to update")

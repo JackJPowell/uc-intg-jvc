@@ -192,26 +192,16 @@ async def remote_cmd_handler(
 def create_button_mappings() -> list[ucapi.ui.DeviceButtonMapping | dict[str, Any]]:
     """Create the button mapping of the remote entity"""
     return [
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.DPAD_UP, "CURSOR_UP"
-        ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.DPAD_DOWN, "CURSOR_DOWN"
-        ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.DPAD_LEFT, "CURSOR_LEFT"
-        ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.DPAD_RIGHT, "CURSOR_RIGHT"
-        ),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_UP, "CURSOR_UP"),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_DOWN, "CURSOR_DOWN"),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_LEFT, "CURSOR_LEFT"),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_RIGHT, "CURSOR_RIGHT"),
         ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_MIDDLE, "CURSOR_ENTER"),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.GREEN, "BACK", "BACK"),
+        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.YELLOW, "MENU", "MENU"),
         ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.GREEN, "BACK", "BACK"
+            ucapi.ui.Buttons.RED, "LENS_MEMORY_1", "LENS_MEMORY_2"
         ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.YELLOW, "MENU", "MENU"
-        ),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.RED, "LENS_MEMORY_1", "LENS_MEMORY_2"),
         ucapi.ui.create_btn_mapping(
             ucapi.ui.Buttons.BLUE, "INPUT_HDMI_1", "INPUT_HDMI_2"
         ),
@@ -224,7 +214,9 @@ def create_button_mappings() -> list[ucapi.ui.DeviceButtonMapping | dict[str, An
 def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
     """Create a user interface with different pages that includes all commands"""
 
-    ui_page1 = ucapi.ui.UiPage("page1", "Power, Inputs & Settings", grid=ucapi.ui.Size(6, 6))
+    ui_page1 = ucapi.ui.UiPage(
+        "page1", "Power, Inputs & Settings", grid=ucapi.ui.Size(6, 6)
+    )
     ui_page1.add(
         ucapi.ui.create_ui_text(
             "On", 0, 0, size=ucapi.ui.Size(2, 1), cmd=ucapi.remote.Commands.ON
@@ -271,7 +263,9 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             cmd=ucapi.remote.create_send_cmd("INPUT_HDMI_2"),
         )
     )
-    ui_page1.add(ucapi.ui.create_ui_text("-- Low Latency --", 0, 2, size=ucapi.ui.Size(6, 1)))
+    ui_page1.add(
+        ucapi.ui.create_ui_text("-- Low Latency --", 0, 2, size=ucapi.ui.Size(6, 1))
+    )
     ui_page1.add(
         ucapi.ui.create_ui_text(
             "On",
@@ -290,7 +284,11 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             cmd=ucapi.remote.create_send_cmd("LOW_LATENCY_OFF"),
         )
     )
-    ui_page1.add(ucapi.ui.create_ui_text("-- Lamp Temperature --", 0, 4, size=ucapi.ui.Size(6, 1)))
+    ui_page1.add(
+        ucapi.ui.create_ui_text(
+            "-- Lamp Temperature --", 0, 4, size=ucapi.ui.Size(6, 1)
+        )
+    )
     ui_page1.add(
         ucapi.ui.create_ui_text(
             "Low",
@@ -457,7 +455,9 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
     )
 
     ui_page3 = ucapi.ui.UiPage("page3", "Lens and Screen", grid=ucapi.ui.Size(4, 10))
-    ui_page3.add(ucapi.ui.create_ui_text("-- Animorphic --", 0, 0, size=ucapi.ui.Size(4, 1)))
+    ui_page3.add(
+        ucapi.ui.create_ui_text("-- Animorphic --", 0, 0, size=ucapi.ui.Size(4, 1))
+    )
     ui_page3.add(
         ucapi.ui.create_ui_text(
             "Off",
@@ -503,7 +503,9 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_D"),
         )
     )
-    ui_page3.add(ucapi.ui.create_ui_text("-- Screen Mask --", 0, 4, size=ucapi.ui.Size(4, 1)))
+    ui_page3.add(
+        ucapi.ui.create_ui_text("-- Screen Mask --", 0, 4, size=ucapi.ui.Size(4, 1))
+    )
     ui_page3.add(
         ucapi.ui.create_ui_text(
             "Off",
@@ -540,7 +542,9 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             cmd=ucapi.remote.create_send_cmd("MASK_CUSTOM3"),
         )
     )
-    ui_page3.add(ucapi.ui.create_ui_text("-- Lens Aperture --", 0, 7, size=ucapi.ui.Size(4, 1)))
+    ui_page3.add(
+        ucapi.ui.create_ui_text("-- Lens Aperture --", 0, 7, size=ucapi.ui.Size(4, 1))
+    )
     ui_page3.add(
         ucapi.ui.create_ui_text(
             "Off",
@@ -659,7 +663,6 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_10"),
         )
     )
-    
 
     return [ui_page1, ui_page2, ui_page3, ui_page4]
 
