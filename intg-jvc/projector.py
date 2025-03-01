@@ -58,11 +58,18 @@ class Projector:
         match cmd_name:
             case ucapi.media_player.Commands.ON:
                 try:
-                    _LOG.debug("Prior to sending Power on command the assumed state is: %s", driver.api.configured_entities.get("state"))
+                    _LOG.debug(
+                        "Prior to sending Power on command the assumed state is: %s",
+                        driver.api.configured_entities.get("state"),
+                    )
                     if not self._client.is_on():
-                        _LOG.debug("The projector reported the state as off. Powering on.")
+                        _LOG.debug(
+                            "The projector reported the state as off. Powering on."
+                        )
                         self._client.power_on()
-                        _LOG.debug("Follow up debug statement after command power on send.")
+                        _LOG.debug(
+                            "Follow up debug statement after command power on send."
+                        )
                     driver.api.configured_entities.update_attributes(
                         entity_id,
                         {
@@ -74,11 +81,18 @@ class Projector:
 
             case ucapi.media_player.Commands.OFF:
                 try:
-                    _LOG.debug("Prior to sending Power off command the assumed state is: %s", driver.api.configured_entities.get("state"))
+                    _LOG.debug(
+                        "Prior to sending Power off command the assumed state is: %s",
+                        driver.api.configured_entities.get("state"),
+                    )
                     if self._client.is_on():
-                        _LOG.debug("The projector reported the state as on. Powering off.")
+                        _LOG.debug(
+                            "The projector reported the state as on. Powering off."
+                        )
                         self._client.power_off()
-                        _LOG.debug("Follow up debug statement after command power off send.")
+                        _LOG.debug(
+                            "Follow up debug statement after command power off send."
+                        )
                     driver.api.configured_entities.update_attributes(
                         entity_id,
                         {
@@ -148,31 +162,31 @@ class Projector:
                 except (Exception, ConnectionError) as e:
                     cmd_error(e)
 
-            case ucapi.media_player.Commands.CURSOR_ENTER | "BACK":
+            case ucapi.media_player.Commands.CURSOR_ENTER | "CURSOR_ENTER":
                 try:
                     self._client.command("menu-ok")
                 except (Exception, ConnectionError) as e:
                     cmd_error(e)
 
-            case ucapi.media_player.Commands.CURSOR_UP | "BACK":
+            case ucapi.media_player.Commands.CURSOR_UP | "CURSOR_UP":
                 try:
                     self._client.command("menu-up")
                 except (Exception, ConnectionError) as e:
                     cmd_error(e)
 
-            case ucapi.media_player.Commands.CURSOR_RIGHT | "BACK":
+            case ucapi.media_player.Commands.CURSOR_RIGHT | "CURSOR_RIGHT":
                 try:
                     self._client.command("menu-right")
                 except (Exception, ConnectionError) as e:
                     cmd_error(e)
 
-            case ucapi.media_player.Commands.CURSOR_DOWN | "BACK":
+            case ucapi.media_player.Commands.CURSOR_DOWN | "CURSOR_DOWN":
                 try:
                     self._client.command("menu-down")
                 except (Exception, ConnectionError) as e:
                     cmd_error(e)
 
-            case ucapi.media_player.Commands.CURSOR_LEFT | "BACK":
+            case ucapi.media_player.Commands.CURSOR_LEFT | "CURSOR_LEFT":
                 try:
                     self._client.command("menu-left")
                 except (Exception, ConnectionError) as e:
