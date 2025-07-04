@@ -29,13 +29,15 @@ The simpliest way to get started is by uploading this integration to your unfold
 - Upload the file to the remove via the integrations tab (Requires Remote firmware >= 2.0.0)
 
 ### Docker
-```docker run -d --name=uc-intg-jvc -p 9090:9090 --restart unless-stopped ghcr.io/jackjpowell/uc-intg-jvc:latest```
+```docker run -d --name=uc-intg-jvc --network host \
+  -v $(pwd)/<local_directory>:/config \ --restart unless-stopped ghcr.io/jackjpowell/uc-intg-jvc:latest```
 
 ### Docker Compose
 ```services:
      uc-intg-jvc:
        image: ghcr.io/jackjpowell/uc-intg-jvc:latest
        container_name: uc-intg-jvc
-       ports:
-         - 9090:9090
+       network_mode: host
+       volumes:
+         - ./<local_directory>:/config
        restart: unless-stopped```
