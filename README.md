@@ -29,8 +29,9 @@ The simpliest way to get started is by uploading this integration to your unfold
 - Upload the file to the remove via the integrations tab (Requires Remote firmware >= 2.0.0)
 
 ### Docker
-```docker run -d --name=uc-intg-jvc --network host \
-  -v $(pwd)/<local_directory>:/config \ --restart unless-stopped ghcr.io/jackjpowell/uc-intg-jvc:latest```
+```
+docker run -d --name=uc-intg-jvc --network host -v $(pwd)/<local_directory>:/config --restart unless-stopped ghcr.io/jackjpowell/uc-intg-jvc:latest
+```
 
 ### Docker Compose
 ```services:
@@ -40,4 +41,7 @@ The simpliest way to get started is by uploading this integration to your unfold
        network_mode: host
        volumes:
          - ./<local_directory>:/config
-       restart: unless-stopped```
+       environment:
+         - UC_INTEGRATION_HTTP_PORT=9090
+       restart: unless-stopped
+```
