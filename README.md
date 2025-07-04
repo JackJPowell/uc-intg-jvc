@@ -34,14 +34,15 @@ docker run -d --name=uc-intg-jvc --network host -v $(pwd)/<local_directory>:/con
 ```
 
 ### Docker Compose
-```services:
-     uc-intg-jvc:
-       image: ghcr.io/jackjpowell/uc-intg-jvc:latest
-       container_name: uc-intg-jvc
-       network_mode: host
-       volumes:
-         - ./<local_directory>:/config
-       environment:
-         - UC_INTEGRATION_HTTP_PORT=9090
-       restart: unless-stopped
+```
+services:
+  uc-intg-jvc:
+     image: ghcr.io/jackjpowell/uc-intg-jvc:latest
+     container_name: uc-intg-jvc
+     network_mode: host
+     volumes:
+       - ./<local_directory>:/config
+     environment:
+       - UC_INTEGRATION_HTTP_PORT=9090
+     restart: unless-stopped
 ```
