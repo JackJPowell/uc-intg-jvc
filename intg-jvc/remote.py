@@ -1,214 +1,422 @@
-#!/usr/bin/env python3
-
-"""Module that includes functions to add a remote entity with all available commands from the media player entity"""
+"""# JVC Remote Control Integration"""
 
 import asyncio
 import logging
 from typing import Any
-import time
 
 import ucapi
-import ucapi.ui
-
-import driver
-import config
-from projector import Projector
+from config import JVCDevice, create_entity_id
+from ucapi import EntityTypes, Remote, StatusCodes, media_player
+from ucapi.media_player import States as MediaStates
+from ucapi.remote import Attributes, Commands, Features
+from ucapi.remote import States as RemoteStates
+from ucapi.ui import DeviceButtonMapping
+import projector
+from const import SimpleCommands
+import const
+from jvcprojector import const as JvcConst
 
 _LOG = logging.getLogger(__name__)
 
+JVC_REMOTE_STATE_MAPPING = {
+    MediaStates.UNKNOWN: RemoteStates.UNKNOWN,
+    MediaStates.UNAVAILABLE: RemoteStates.UNAVAILABLE,
+    MediaStates.OFF: RemoteStates.OFF,
+    MediaStates.ON: RemoteStates.ON,
+    MediaStates.STANDBY: RemoteStates.OFF,
+}
 
-async def update_rt(entity_id: str, ip: str, password: str | None = None):
-    """Retrieve input source, power state and muted state from the projector, compare them with the known state on the remote and update them if necessary"""
 
-    try:
-        jvc = Projector(ip, password)
-        state = jvc.get_attr_power()
-    except Exception as e:
-        _LOG.error(e)
-        _LOG.warning("Can't get power status from projector. Set to Unavailable")
-        state = {ucapi.remote.Attributes.STATE: ucapi.remote.States.UNAVAILABLE}
+class JVCRemote(Remote):
+    """Representation of a JVC Remote entity."""
 
-    try:
-        api_update_attributes = driver.api.configured_entities.update_attributes(
-            entity_id, state
-        )
-    except Exception as e:
-        raise Exception(
-            "Error while updating state attribute for entity id " + entity_id
-        ) from e
-
-    if not api_update_attributes:
-        raise Exception(
-            "Entity "
-            + entity_id
-            + " not found. Please make sure it's added as a configured entity on the remote"
-        )
-    else:
-        _LOG.info(
-            "Updated remote entity state attribute to "
-            + str(state)
-            + " for "
-            + entity_id
+    def __init__(self, config_device: JVCDevice, device: projector.JVCProjector):
+        """Initialize the class."""
+        self._device: projector.JVCProjector = device
+        _LOG.debug("JVC Remote init")
+        entity_id = create_entity_id(config_device.identifier, EntityTypes.REMOTE)
+        features = [Features.SEND_CMD, Features.ON_OFF, Features.TOGGLE]
+        super().__init__(
+            entity_id,
+            f"{config_device.name} Remote",
+            features,
+            attributes={
+                Attributes.STATE: device.state,
+            },
+            simple_commands=[member.value for member in SimpleCommands],
+            button_mapping=JVC_REMOTE_BUTTONS_MAPPING,
+            ui_pages=create_ui_pages(),
+            cmd_handler=self.command,
         )
 
-
-async def remote_cmd_handler(
-    entity: ucapi.Remote, cmd_id: str, params: dict[str, Any] | None
-) -> ucapi.StatusCodes:
-    """
-    Remote command handler.
-
-    Called by the integration-API if a command is sent to a configured remote-entity.
-
-    :param entity: remote entity
-    :param cmd_id: command
-    :param params: optional command parameters
-    :return: status of the command
-    """
-
-    if not params:
-        _LOG.info(f"Received {cmd_id} command for {entity.id}")
-    else:
-        _LOG.info(f"Received {cmd_id} command with parameter {params} for {entity.id}")
-        repeat = params.get("repeat")
-        delay = params.get("delay")
-        hold = params.get("hold")
-
-        if hold is None or hold == "":
-            hold = 0
-        if repeat is None:
-            repeat = 1
-        if delay is None:
-            delay = 0
-        else:
-            delay = delay / 1000  # Convert milliseconds to seconds for sleep
-
-        if repeat == 1 and delay != 0:
-            _LOG.info(
-                str(delay)
-                + " seconds delay will be ignored as the command will not be repeated (repeat = 1)"
-            )
-            delay = 0
-
-    password = None
-    try:
-        ip = config.Setup.get("ip")
+    def get_int_param(self, param: str, params: dict[str, Any], default: int):
+        """Get parameter in integer format."""
         try:
-            password = config.Setup.get("password")
-        except ValueError:
-            _LOG.debug("No password set")
-        api = Projector(ip, password)
-    except ValueError as v:
-        _LOG.error(v)
-        return ucapi.StatusCodes.SERVER_ERROR
+            value = params.get(param, default)
+        except AttributeError:
+            return default
 
-    match cmd_id:
-        case (
-            ucapi.remote.Commands.ON
-            | ucapi.remote.Commands.OFF
-            | ucapi.remote.Commands.TOGGLE
-        ):
-            try:
-                await api.send_cmd(entity.id, cmd_id)
-            except Exception as e:
-                if e is None:
-                    return ucapi.StatusCodes.SERVER_ERROR
-                return ucapi.StatusCodes.BAD_REQUEST
-            return ucapi.StatusCodes.OK
+        if isinstance(value, str) and len(value) > 0:
+            return int(float(value))
+        return default
 
-        case ucapi.remote.Commands.SEND_CMD:
-            command = params.get("command")
+    async def command(
+        self, cmd_id: str, params: dict[str, Any] | None = None
+    ) -> StatusCodes:
+        """
+        Remote entity command handler.
 
-            try:
-                i = 0
-                r = range(repeat)
-                for i in r:
-                    i = i + 1
-                    if repeat != 1:
-                        _LOG.debug("Round " + str(i) + " for command " + command)
-                    if hold != 0:
-                        cmd_start = time.time() * 1000
-                        while time.time() * 1000 - cmd_start < hold:
-                            await api.send_cmd(entity.id, command)
-                            await asyncio.sleep(0)
-                    else:
-                        await api.send_cmd(entity.id, command)
-                        await asyncio.sleep(0)
-                    await asyncio.sleep(delay)
-            except Exception as e:
-                if repeat != 1:
-                    _LOG.warning(
-                        "Execution of the command %s failed. Remaining %s repetitions will no longer be executed",
-                        command,
-                        str(repeat - 1),
-                    )
-                if e is None:
-                    return ucapi.StatusCodes.SERVER_ERROR
-                return ucapi.StatusCodes.BAD_REQUEST
+        Called by the integration-API if a command is sent to a configured remote entity.
 
-            return ucapi.StatusCodes.OK
+        :param cmd_id: command
+        :param params: optional command parameters
+        :return: status code of the command request
+        """
+        repeat = 1
+        _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
 
-        case ucapi.remote.Commands.SEND_CMD_SEQUENCE:
-            sequence = params.get("sequence")
+        if self._device is None:
+            _LOG.warning("No JVC Projector instance for entity: %s", self.id)
+            return StatusCodes.SERVICE_UNAVAILABLE
 
-            _LOG.info(f"Command sequence: {sequence}")
+        if params:
+            repeat = self.get_int_param("repeat", params, 1)
 
-            for command in sequence:
-                _LOG.debug("Sending command: " + command)
-                try:
-                    i = 0
-                    r = range(repeat)
-                    for i in r:
-                        i = i + 1
-                        if repeat != 1:
-                            _LOG.debug("Round " + str(i) + " for command " + command)
-                        if hold != 0:
-                            cmd_start = time.time() * 1000
-                            while time.time() * 1000 - cmd_start < hold:
-                                await api.send_cmd(entity.id, command)
-                                await asyncio.sleep(0)
-                        else:
-                            await api.send_cmd(entity.id, command)
-                            await asyncio.sleep(0)
-                        await asyncio.sleep(delay)
-                except Exception as e:
-                    if repeat != 1:
-                        _LOG.warning(
-                            "Execution of the command %s failed. Remaining %s repetitions will no longer be executed",
-                            command,
-                            str(repeat - 1),
+        for _i in range(0, repeat):
+            await self.handle_command(cmd_id, params)
+        return StatusCodes.OK
+
+    async def handle_command(
+        self, cmd_id: str, params: dict[str, Any] | None = None
+    ) -> StatusCodes:
+        """Handle command."""
+        command = ""
+        delay = 0
+
+        if params:
+            command = params.get("command", "")
+            delay = self.get_int_param("delay", params, 0)
+
+        if command == "":
+            command = f"remote.{cmd_id}"
+
+        _LOG.info("Got command request: %s %s", cmd_id, params if params else "")
+
+        jvc = self._device
+        res = None
+        try:
+            if command == "remote.on":
+                _LOG.debug("Sending ON command to JVC")
+                res = await jvc.send_command("powerOn")
+            elif command == "remote.off":
+                res = await jvc.send_command("powerOff")
+            elif command == "remote.toggle":
+                res = await jvc.send_command("powerToggle")
+            elif cmd_id == Commands.SEND_CMD:
+                match command:
+                    case media_player.Commands.ON:
+                        _LOG.debug("Sending ON command to JVC")
+                        res = await jvc.send_command("powerOn")
+                    case media_player.Commands.OFF:
+                        res = await jvc.send_command("powerOff")
+                    case media_player.Commands.TOGGLE:
+                        res = await jvc.send_command("powerToggle")
+                    case media_player.Commands.CURSOR_UP:
+                        res = await jvc.send_command("remote", code=JvcConst.REMOTE_UP)
+                    case media_player.Commands.CURSOR_DOWN:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_DOWN
                         )
-                    if e is None:
-                        return ucapi.StatusCodes.SERVER_ERROR
-                    return ucapi.StatusCodes.BAD_REQUEST
+                    case media_player.Commands.CURSOR_LEFT:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_LEFT
+                        )
+                    case media_player.Commands.CURSOR_RIGHT:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_RIGHT
+                        )
+                    case media_player.Commands.CURSOR_ENTER:
+                        res = await jvc.send_command("remote", code=JvcConst.REMOTE_OK)
+                    case media_player.Commands.BACK:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_BACK
+                        )
+                    case media_player.Commands.INFO:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_INFO
+                        )
+                    case media_player.Commands.MENU:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_MENU
+                        )
+                    case media_player.Commands.SELECT_SOURCE:
+                        await jvc.send_command(
+                            "setInput",
+                            source=params.get("source"),
+                        )
+                    case SimpleCommands.REMOTE_ADVANCED_MENU:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_ADVANCED_MENU
+                        )
+                    case SimpleCommands.REMOTE_PICTURE_MODE:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_PICTURE_MODE
+                        )
+                    case SimpleCommands.REMOTE_COLOR_PROFILE:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_COLOR_PROFILE
+                        )
+                    case SimpleCommands.REMOTE_LENS_CONTROL:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_LENS_CONTROL
+                        )
+                    case SimpleCommands.REMOTE_SETTING_MEMORY:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_SETTING_MEMORY
+                        )
+                    case SimpleCommands.REMOTE_GAMMA_SETTINGS:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_GAMMA_SETTINGS
+                        )
+                    case SimpleCommands.REMOTE_CMD:
+                        res = await jvc.send_command("remote", code=JvcConst.REMOTE_CMD)
+                    case SimpleCommands.REMOTE_MODE_1:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_MODE_1
+                        )
+                    case SimpleCommands.REMOTE_MODE_2:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_MODE_2
+                        )
+                    case SimpleCommands.REMOTE_MODE_3:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_MODE_3
+                        )
+                    case SimpleCommands.REMOTE_LENS_AP:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_LENS_AP
+                        )
+                    case SimpleCommands.REMOTE_ANAMO:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_ANAMO
+                        )
+                    case SimpleCommands.REMOTE_GAMMA:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_GAMMA
+                        )
+                    case SimpleCommands.REMOTE_COLOR_TEMP:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_COLOR_TEMP
+                        )
+                    case SimpleCommands.REMOTE_3D_FORMAT:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_3D_FORMAT
+                        )
+                    case SimpleCommands.REMOTE_PIC_ADJ:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_PIC_ADJ
+                        )
+                    case SimpleCommands.REMOTE_NATURAL:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_NATURAL
+                        )
+                    case SimpleCommands.REMOTE_CINEMA:
+                        res = await jvc.send_command(
+                            "remote", code=JvcConst.REMOTE_CINEMA
+                        )
+                    case SimpleCommands.LENS_MEMORY_1:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_1
+                        )
+                    case SimpleCommands.LENS_MEMORY_2:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_2
+                        )
+                    case SimpleCommands.LENS_MEMORY_3:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_3
+                        )
+                    case SimpleCommands.LENS_MEMORY_4:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_4
+                        )
+                    case SimpleCommands.LENS_MEMORY_5:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_5
+                        )
+                    case SimpleCommands.LENS_MEMORY_6:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_6
+                        )
+                    case SimpleCommands.LENS_MEMORY_7:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_7
+                        )
+                    case SimpleCommands.LENS_MEMORY_8:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_8
+                        )
+                    case SimpleCommands.LENS_MEMORY_9:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_9
+                        )
+                    case SimpleCommands.LENS_MEMORY_10:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_MEMORY_10
+                        )
+                    case SimpleCommands.PICTURE_MODE_FILM:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_FILM
+                        )
+                    case SimpleCommands.PICTURE_MODE_CINEMA:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_CINEMA
+                        )
+                    case SimpleCommands.PICTURE_MODE_NATURAL:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_NATURAL
+                        )
+                    case SimpleCommands.PICTURE_MODE_HDR10:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_HDR10
+                        )
+                    case SimpleCommands.PICTURE_MODE_THX:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_THX
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER1:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER1
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER2:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER2
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER3:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER3
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER4:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER4
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER5:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER5
+                        )
+                    case SimpleCommands.PICTURE_MODE_USER6:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_USER6
+                        )
+                    case SimpleCommands.PICTURE_MODE_HLG:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_HLG
+                        )
+                    case SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_FRAME_ADAPT_HDR
+                        )
+                    case SimpleCommands.PICTURE_MODE_HDR10P:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_HDR10P
+                        )
+                    case SimpleCommands.PICTURE_MODE_PANA_PQ:
+                        res = await jvc.send_command(
+                            "operation", code=const.PICTURE_MODE_PANA_PQ
+                        )
+                    case SimpleCommands.LOW_LATENCY_ON:
+                        res = await jvc.send_command(
+                            "operation", code=const.LOW_LATENCY_ON
+                        )
+                    case SimpleCommands.LOW_LATENCY_OFF:
+                        res = await jvc.send_command(
+                            "operation", code=const.LOW_LATENCY_OFF
+                        )
+                    case SimpleCommands.MASK_OFF:
+                        res = await jvc.send_command("operation", code=const.MASK_OFF)
+                    case SimpleCommands.MASK_CUSTOM1:
+                        res = await jvc.send_command(
+                            "operation", code=const.MASK_CUSTOM1
+                        )
+                    case SimpleCommands.MASK_CUSTOM2:
+                        res = await jvc.send_command(
+                            "operation", code=const.MASK_CUSTOM2
+                        )
+                    case SimpleCommands.MASK_CUSTOM3:
+                        res = await jvc.send_command(
+                            "operation", code=const.MASK_CUSTOM3
+                        )
+                    case SimpleCommands.LAMP_LOW:
+                        res = await jvc.send_command("operation", code=const.LAMP_LOW)
+                    case SimpleCommands.LAMP_MID:
+                        res = await jvc.send_command("operation", code=const.LAMP_MID)
+                    case SimpleCommands.LAMP_HIGH:
+                        res = await jvc.send_command("operation", code=const.LAMP_HIGH)
+                    case SimpleCommands.LENS_APERTURE_OFF:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_APERTURE_OFF
+                        )
+                    case SimpleCommands.LENS_APERTURE_AUTO1:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_APERTURE_AUTO1
+                        )
+                    case SimpleCommands.LENS_APERTURE_AUTO2:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_APERTURE_AUTO2
+                        )
+                    case SimpleCommands.LENS_ANIMORPHIC_OFF:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_ANIMORPHIC_OFF
+                        )
+                    case SimpleCommands.LENS_ANIMORPHIC_A:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_ANIMORPHIC_A
+                        )
+                    case SimpleCommands.LENS_ANIMORPHIC_B:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_ANIMORPHIC_B
+                        )
+                    case SimpleCommands.LENS_ANIMORPHIC_C:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_ANIMORPHIC_C
+                        )
+                    case SimpleCommands.LENS_ANIMORPHIC_D:
+                        res = await jvc.send_command(
+                            "operation", code=const.LENS_ANIMORPHIC_D
+                        )
 
-            return ucapi.StatusCodes.OK
-
-        case _:
-            _LOG.info(f"Unsupported command: {cmd_id} for {entity.id}")
+            elif cmd_id == Commands.SEND_CMD_SEQUENCE:
+                commands = params.get("sequence", [])
+                res = StatusCodes.OK
+                for command in commands:
+                    res = await self.handle_command(
+                        Commands.SEND_CMD, {"command": command, "params": params}
+                    )
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+            else:
+                return StatusCodes.NOT_IMPLEMENTED
+            if delay > 0 and cmd_id != Commands.SEND_CMD_SEQUENCE:
+                await asyncio.sleep(delay)
+            return res
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOG.error("Error executing remote command %s: %s", cmd_id, ex)
             return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.OK
 
 
-def create_button_mappings() -> list[ucapi.ui.DeviceButtonMapping | dict[str, Any]]:
-    """Create the button mapping of the remote entity"""
-    return [
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_UP, "CURSOR_UP"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_DOWN, "CURSOR_DOWN"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_LEFT, "CURSOR_LEFT"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_RIGHT, "CURSOR_RIGHT"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_MIDDLE, "CURSOR_ENTER"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.GREEN, "BACK", "BACK"),
-        ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.YELLOW, "MENU", "MENU"),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.RED, "LENS_MEMORY_1", "LENS_MEMORY_2"
-        ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.BLUE, "INPUT_HDMI_1", "INPUT_HDMI_2"
-        ),
-        ucapi.ui.create_btn_mapping(
-            ucapi.ui.Buttons.POWER, ucapi.remote.Commands.TOGGLE
-        ),
-    ]
+JVC_REMOTE_BUTTONS_MAPPING: [DeviceButtonMapping] = [  # type: ignore
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_UP, "CURSOR_UP"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_DOWN, "CURSOR_DOWN"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_LEFT, "CURSOR_LEFT"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_RIGHT, "CURSOR_RIGHT"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_MIDDLE, "CURSOR_ENTER"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.GREEN, "BACK", "BACK"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.YELLOW, "MENU", "MENU"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.RED, "LENS_MEMORY_1", "LENS_MEMORY_2"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.BLUE, "INPUT_HDMI_1", "INPUT_HDMI_2"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.POWER, ucapi.remote.Commands.TOGGLE),
+]
 
 
 def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
@@ -665,26 +873,3 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
     )
 
     return [ui_page1, ui_page2, ui_page3, ui_page4]
-
-
-async def add_remote(ent_id: str, name: str):
-    """Function to add a remote entity"""
-
-    _LOG.info("Add projector remote entity with id " + ent_id + " and name " + name)
-
-    definition = ucapi.Remote(
-        ent_id,
-        name,
-        features=config.RemoteDef.features,
-        attributes=config.RemoteDef.attributes,
-        simple_commands=config.RemoteDef.simple_commands,
-        button_mapping=create_button_mappings(),
-        ui_pages=create_ui_pages(),
-        cmd_handler=remote_cmd_handler,
-    )
-
-    _LOG.debug("Projector remote entity definition created")
-
-    driver.api.available_entities.add(definition)
-
-    _LOG.info("Added projector remote entity")

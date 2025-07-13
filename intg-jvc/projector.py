@@ -1,282 +1,263 @@
-#!/usr/bin/env python3
+"""
+This module implements the JVC Projector communication of the Remote Two/3 integration driver.
 
-"""Module that includes functions to execute pySDCP commands"""
+"""
 
+import asyncio
 import logging
+from asyncio import AbstractEventLoop
+from enum import StrEnum, IntEnum
+from typing import Any, ParamSpec, TypeVar
 
-import ucapi
-from jvc_projector_remote import JVCProjector
+import aiohttp
 
-import config
-import driver
+from jvcprojector.projector import JvcProjector
+from jvcprojector import const as JvcConst
+from config import JVCDevice
+from pyee.asyncio import AsyncIOEventEmitter
+from ucapi.media_player import Attributes as MediaAttr
 
 _LOG = logging.getLogger(__name__)
 
 
-class Projector:
-    def __init__(self, address=str, password: str | None = None) -> None:
-        self._address = address
-        self._client = JVCProjector(
-            self._address,
-            password=password,
-            port=20554,
-            delay_ms=600,
-            connect_timeout=10,
-            max_retries=10,
+class EVENTS(IntEnum):
+    """Internal driver events."""
+
+    CONNECTING = 0
+    CONNECTED = 1
+    DISCONNECTED = 2
+    PAIRED = 3
+    ERROR = 4
+    UPDATE = 5
+
+
+_JvcProjectorT = TypeVar("_JvcProjectorT", bound="JvcProjector")
+_P = ParamSpec("_P")
+
+
+class PowerState(StrEnum):
+    """Playback state for companion protocol."""
+
+    OFF = "OFF"
+    ON = "ON"
+    STANDBY = "STANDBY"
+
+
+class JVCProjector:
+    """Representing a JVC Projector Device."""
+
+    def __init__(
+        self, device: JVCDevice, loop: AbstractEventLoop | None = None
+    ) -> None:
+        """Create instance."""
+        self._loop: AbstractEventLoop = loop or asyncio.get_running_loop()
+        self.events = AsyncIOEventEmitter(self._loop)
+        self._is_connected: bool = False
+        self._device: JVCDevice = device
+        self._jvc_projector = JvcProjector(
+            host=self._device.address, password=self._device.password
         )
+        self._connection_attempts: int = 0
+        self._state: PowerState = PowerState.OFF
+        self._source_list: list[str] = self._device.input_list or []
+        self._active_source: str = ""
+        self._features: dict = {}
+        self._signal: str = ""
 
-    def get_attr_power(self):
-        """Get the current power state from the projector and return the corresponding ucapi power state attribute"""
+    @property
+    def device_config(self) -> JVCDevice:
+        """Return the device configuration."""
+        return self._device
+
+    @property
+    def identifier(self) -> str:
+        """Return the device identifier."""
+        if not self._device.identifier:
+            raise ValueError("Instance not initialized, no identifier available")
+        return self._device.identifier
+
+    @property
+    def log_id(self) -> str:
+        """Return a log identifier."""
+        return self._device.name if self._device.name else self._device.identifier
+
+    @property
+    def name(self) -> str:
+        """Return the device name."""
+        return self._device.name
+
+    @property
+    def address(self) -> str | None:
+        """Return the optional device address."""
+        return self._device.address
+
+    @property
+    def state(self) -> PowerState | None:
+        """Return the device state."""
+        return self._state.upper()
+
+    @property
+    def source_list(self) -> list[str]:
+        """Return a list of available input sources."""
+        return sorted(self._source_list)
+
+    @property
+    def source(self) -> str:
+        """Return the current input source."""
+        return self._active_source
+
+    @property
+    def attributes(self) -> dict[str, any]:
+        """Return the device attributes."""
+        updated_data = {
+            MediaAttr.STATE: self.state,
+        }
+        if self.source_list:
+            updated_data[MediaAttr.SOURCE_LIST] = self.source_list
+        if self.source:
+            updated_data[MediaAttr.SOURCE] = self.source
+        return updated_data
+
+    async def connect(self) -> None:
+        """Establish connection to the AVR."""
+        if self.state != PowerState.OFF:
+            return
+
+        _LOG.debug("[%s] Connecting to device", self.log_id)
+        self.events.emit(EVENTS.CONNECTING, self._device.identifier)
+        await self._connect_setup()
+
+    async def _connect_setup(self) -> None:
         try:
-            power = self._client.command("power")
-            _LOG.debug("Power State: %s", power)
-            if power == "lamp_on":
-                return ucapi.media_player.States.ON
-            return ucapi.media_player.States.OFF
-        except (Exception, ConnectionError) as e:
-            raise Exception(e) from e
+            await self._connect()
 
-    def get_attr_source(self):
-        """Get the current input source from the projector and return it as a string"""
+            if self.state != PowerState.OFF:
+                _LOG.debug("[%s] Device is alive", self.log_id)
+                self.events.emit(
+                    EVENTS.UPDATE, self._device.identifier, {"state": self.state}
+                )
+            else:
+                _LOG.debug("[%s] Device is not alive", self.log_id)
+                self.events.emit(
+                    EVENTS.UPDATE,
+                    self._device.identifier,
+                    {"state": PowerState.OFF},
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.error("[%s] Could not connect: %s", self.log_id, err)
+        finally:
+            _LOG.debug("[%s] Connect setup finished", self.log_id)
+
+        self.events.emit(EVENTS.CONNECTED, self._device.identifier)
+        _LOG.debug("[%s] Connected", self.log_id)
+
+        await self._update_attributes()
+
+    async def _connect(self) -> None:
+        """Connect to the device."""
+        _LOG.debug(
+            "[%s] Connecting to TVWS device at IP address: %s",
+            self.log_id,
+            self.address,
+        )
         try:
-            return self._client.command("input")
-        except (Exception, ConnectionError) as e:
-            raise Exception(e) from e
+            jvc = JvcProjector(
+                host=self._device.address, password=self._device.password
+            )
+            self._state = await jvc.get_power()
+        except aiohttp.ClientError as err:
+            _LOG.error("[%s] Connection error: %s", self.log_id, err)
+            self._state = PowerState.OFF
 
-    async def send_cmd(self, entity_id: str, cmd_name: str, params=None):
-        """Send a command to the projector and raise an exception if it fails"""
+    async def _update_attributes(self) -> None:
+        _LOG.debug("[%s] Updating app list", self.log_id)
+        update = {}
 
-        mp_id = config.Setup.get("id")
+        try:
+            jvc = JvcProjector(
+                host=self._device.address, password=self._device.password
+            )
+            state = await jvc.get_state()
+            self._state = PowerState(state["power"])
+            self._active_source = state["input"].upper()
+            self._signal = state["source"].upper()
 
-        def cmd_error(msg: str = None):
-            if msg is None:
-                _LOG.error("Error while executing the command: " + cmd_name)
-                raise Exception(msg)
-            _LOG.error(msg)
-            raise Exception(msg)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.error("[%s] Error retrieving status: %s", self.log_id, err)
 
-        match cmd_name:
-            case ucapi.media_player.Commands.ON:
-                try:
-                    _LOG.debug(
-                        "Prior to sending Power on command the assumed state is: %s",
-                        driver.api.configured_entities.get("state"),
-                    )
-                    if not self._client.is_on():
-                        _LOG.debug(
-                            "The projector reported the state as off. Powering on."
-                        )
-                        self._client.power_on()
-                        _LOG.debug(
-                            "Follow up debug statement after command power on send."
-                        )
-                    driver.api.configured_entities.update_attributes(
-                        entity_id,
-                        {
-                            ucapi.media_player.Attributes.STATE: ucapi.media_player.States.ON
-                        },
-                    )
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
+        self._source_list = [
+            "hdmi1",
+            "hdmi2",
+        ]
 
-            case ucapi.media_player.Commands.OFF:
-                try:
-                    _LOG.debug(
-                        "Prior to sending Power off command the assumed state is: %s",
-                        driver.api.configured_entities.get("state"),
-                    )
-                    if self._client.is_on():
-                        _LOG.debug(
-                            "The projector reported the state as on. Powering off."
-                        )
-                        self._client.power_off()
-                        _LOG.debug(
-                            "Follow up debug statement after command power off send."
-                        )
-                    driver.api.configured_entities.update_attributes(
-                        entity_id,
-                        {
-                            ucapi.media_player.Attributes.STATE: ucapi.media_player.States.OFF
-                        },
-                    )
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
+        try:
+            update["state"] = self.state
+            update["source"] = self.source.upper()
+            update["source_list"] = self.source_list
 
-            case ucapi.media_player.Commands.TOGGLE:
-                try:
-                    _LOG.debug("Toggling Power requested.")
-                    if self._client.is_on:
-                        self._client.power_off()
-                        driver.api.configured_entities.update_attributes(
-                            entity_id,
-                            {
-                                ucapi.media_player.Attributes.STATE: ucapi.media_player.States.OFF
-                            },
-                        )
-                    else:
-                        self._client.power_on()
-                        driver.api.configured_entities.update_attributes(
-                            entity_id,
-                            {
-                                ucapi.media_player.Attributes.STATE: ucapi.media_player.States.ON
-                            },
-                        )
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOG.exception("[%s] App list: protocol error", self.log_id)
 
-            case (
-                ucapi.media_player.Commands.SELECT_SOURCE
-                | "INPUT_HDMI_1"
-                | "INPUT_HDMI_2"
-            ):
-                if params:
-                    source = params["source"]
-                else:
-                    source = cmd_name.replace("INPUT_", "").replace("_", " ")
+        self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
 
-                try:
-                    if source == "HDMI 1":
-                        self._client.command("input-hdmi1")
-                        driver.api.configured_entities.update_attributes(
-                            mp_id, {ucapi.media_player.Attributes.SOURCE: source}
-                        )
-                    elif source == "HDMI 2":
-                        self._client.command("input-hdmi2")
-                        driver.api.configured_entities.update_attributes(
-                            mp_id, {ucapi.media_player.Attributes.SOURCE: source}
-                        )
-                    else:
-                        cmd_error("Unknown source: " + source)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
+    async def send_command(self, command: str, *args: Any, **kwargs: Any) -> str:
+        """Send a command to the AVR."""
+        update = {}
+        try:
+            _LOG.debug(
+                "[%s] Sending command: %s, args: %s, kwargs: %s",
+                self.log_id,
+                command,
+                args,
+                kwargs,
+            )
+            match command:
+                case "powerOn":
+                    res = await self._jvc_projector.power_on()
+                    update["state"] = PowerState.ON
+                case "powerOff":
+                    res = await self._jvc_projector.power_off()
+                    update["state"] = PowerState.OFF
+                case "powerToggle":
+                    power = await self._jvc_projector.get_power()
+                    if power.upper() == PowerState.ON:
+                        res = await self._jvc_projector.power_off()
+                        update["state"] = PowerState.OFF
+                    elif power.upper() == PowerState.OFF:
+                        res = await self._jvc_projector.power_on()
+                        update["state"] = PowerState.ON
+                case "setInput":
+                    code = JvcConst.REMOTE_HDMI_1  # Default to HDMI1
+                    source = kwargs.get("source", "")
+                    if source.upper() == "HDMI2":
+                        code = JvcConst.REMOTE_HDMI_2
+                    res = await self._jvc_projector.remote(code)
+                    update["source"] = kwargs["source"].upper()
+                case "remote":
+                    code = kwargs.get("code")
+                    res = await self._jvc_projector.remote(code)
+                case "operation":
+                    code = kwargs.get("code")
+                    res = await self._jvc_projector.op(code)
 
-            case ucapi.media_player.Commands.HOME | "HOME" | "MENU":
-                try:
-                    self._client.command("menu-menu")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
+            self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
+            return res
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.error(
+                "[%s] Error sending command %s: %s",
+                self.log_id,
+                command,
+                err,
+            )
+            raise Exception(err) from err  # pylint: disable=broad-exception-raised
 
-            case ucapi.media_player.Commands.BACK | "BACK":
-                try:
-                    self._client.command("menu-back")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case ucapi.media_player.Commands.CURSOR_ENTER | "CURSOR_ENTER":
-                try:
-                    self._client.command("menu-ok")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case ucapi.media_player.Commands.CURSOR_UP | "CURSOR_UP":
-                try:
-                    self._client.command("menu-up")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case ucapi.media_player.Commands.CURSOR_RIGHT | "CURSOR_RIGHT":
-                try:
-                    self._client.command("menu-right")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case ucapi.media_player.Commands.CURSOR_DOWN | "CURSOR_DOWN":
-                try:
-                    self._client.command("menu-down")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case ucapi.media_player.Commands.CURSOR_LEFT | "CURSOR_LEFT":
-                try:
-                    self._client.command("menu-left")
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case (
-                "PICTURE_MODE_FILM"
-                | "PICTURE_MODE_CINEMA"
-                | "PICTURE_MODE_NATURAL"
-                | "PICTURE_MODE_HDR10"
-                | "PICTURE_MODE_THX"
-                | "PICTURE_MODE_USER1"
-                | "PICTURE_MODE_USER2"
-                | "PICTURE_MODE_USER3"
-                | "PICTURE_MODE_USER4"
-                | "PICTURE_MODE_USER5"
-                | "PICTURE_MODE_USER6"
-                | "PICTURE_MODE_HLG"
-                | "PICTURE_MODE_FRAME_ADAPT_HDR"
-                | "PICTURE_MODE_HDR10P"
-                | "PICTURE_MODE_PANA_PQ"
-            ):
-                mode = cmd_name.replace("PICTURE_MODE_", "PICTURE_MODE-").lower()
-                try:
-                    self._client.command(mode)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case (
-                "LENS_MEMORY_1"
-                | "LENS_MEMORY_2"
-                | "LENS_MEMORY_3"
-                | "LENS_MEMORY_4"
-                | "LENS_MEMORY_5"
-                | "LENS_MEMORY_6"
-                | "LENS_MEMORY_7"
-                | "LENS_MEMORY_8"
-                | "LENS_MEMORY_9"
-                | "LENS_MEMORY_10"
-            ):
-                preset = cmd_name.replace("LENS_", "").lower()
-                preset = preset.replace("_", "-")
-                try:
-                    self._client.command(preset)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case "LOW_LATENCY_ON" | "LOW_LATENCY_OFF":
-                latency = cmd_name.replace("LOW_LATENCY_", "LOW_LATENCY-").lower()
-                try:
-                    self._client.command(latency)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case "MASK_OFF" | "MASK_CUSTOM1" | "MASK_CUSTOM2" | "MASK_CUSTOM3":
-                mask = cmd_name.replace("_", "-")
-
-                try:
-                    self._client.command(mask)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case "LAMP_LOW" | "LAMP_MID" | "LAMP_HIGH":
-                lamp = cmd_name.replace("_", "-").lower()
-                try:
-                    self._client.command(lamp)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case "LENS_APERTURE_OFF" | "LENS_APERTURE_AUTO1" | "LENS_APERTURE_AUTO2":
-                lens = cmd_name.replace("LENS_", "")
-                lens = lens.replace("_", "-").lower()
-                try:
-                    self._client.command(lens)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case (
-                "LENS_ANIMORPHIC_OFF"
-                | "LENS_ANIMORPHIC_A"
-                | "LENS_ANIMORPHIC_B"
-                | "LENS_ANIMORPHIC_C"
-                | "LENS_ANIMORPHIC_D"
-            ):
-                lens = cmd_name.replace("LENS_", "")
-                lens = lens.replace("_", "-").lower()
-                try:
-                    self._client.command(lens)
-                except (Exception, ConnectionError) as e:
-                    cmd_error(e)
-
-            case _:
-                cmd_error("Command not found or unsupported: " + cmd_name)
+    def simple_power(self, power: str) -> PowerState:
+        """Set the power state of the projector."""
+        if power in ["on", "warming"]:
+            return PowerState.ON
+        elif power in ["cooling", "standby", "off"]:
+            return PowerState.OFF
+        else:
+            raise ValueError(f"Unknown power state: {power}")
