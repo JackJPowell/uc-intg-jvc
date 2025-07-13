@@ -1,8 +1,8 @@
 {
-  "driver_id": "jvc_projector_driver",
+  "driver_id": "jvc_projector_driver1",
   "version": "0.3.0",
   "min_core_api": "0.20.0",
-  "name": { "en": "JVC Projector" },
+  "name": { "en": "JVC Projector (DEV)" },
   "icon": "uc:projector",
   "description": {
     "en": "Control your network connected JVC Projector"
@@ -15,31 +15,27 @@
   "home_page": "https://github.com/JackJPowell/uc-intg-jvc",
   "setup_data_schema": {
     "title": {
-      "en": "Integration setup"
+      "en": "Integration setup",
+      "de": "Integrationssetup",
+      "fr": "Configuration de l'intégration"
     },
     "settings": [
       {
-        "id": "name",
+        "id": "info",
         "label": {
-          "en": "Projector Name"
+          "en": "Setup process",
+          "de": "Setup Fortschritt",
+          "fr": "Progression de la configuration"
         },
-        "field": { "text": { "value": "" } }
-      },
-      {
-        "id": "ip",
-        "label": {
-          "en": "IP Address"
-        },
-        "field": { "text": { "value": "" } }
-      },
-      {
-        "id": "password",
-        "label": {
-          "en": "Password (If set on your projector)"
-        },
-        "field": { "text": { "value": "" } }
+        "field": {
+          "label": {
+            "value": {
+              "en": "This integration will allow you to control JVC Projectors on your network."
+            }
+          }
+        }
       }
     ]
   },
-  "release_date": "2025-07-15"
+  "release_date": "2025-07-13"
 }

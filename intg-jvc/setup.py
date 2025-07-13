@@ -93,6 +93,9 @@ async def driver_setup_handler(
                 UserDataResponse or UserConfirmationResponse
     :return: the setup action on how to continue
     """
+    global _setup_step  # pylint: disable=global-statement
+    global _cfg_add_device  # pylint: disable=global-statement
+
     if isinstance(msg, DriverSetupRequest):
         _setup_step = SetupSteps.INIT
         _cfg_add_device = False
@@ -212,7 +215,21 @@ async def _handle_discovery() -> RequestUserInput | SetupError:
                     },
                     "id": "ip",
                     "label": {
-                        "en": "Discovered TVs:",
+                        "en": "Discovered Projectors:",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "name",
+                    "label": {
+                        "en": "Projector Name",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "password",
+                    "label": {
+                        "en": "Password (Optional)",
                     },
                 },
             ],
@@ -348,9 +365,9 @@ async def _handle_creation(
     :return: the setup action on how to continue
     """
 
-    ip = msg.setup_data["ip"]
-    password = msg.setup_data["password"]
-    name = msg.setup_data["name"]
+    ip = msg.input_values["ip"]
+    password = msg.input_values["password"]
+    name = msg.input_values["name"]
 
     if ip != "":
         # Check if input is a valid ipv4 or ipv6 address
@@ -358,13 +375,14 @@ async def _handle_creation(
             ip_address(ip)
         except ValueError:
             _LOG.error("The entered ip address %s is not valid", ip)
-            return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
+            return SetupError(IntegrationSetupError.NOT_FOUND)
 
         _LOG.info("Entered ip address: %s", ip)
 
         try:
             jvc = JvcProjector(ip, password=password)
             try:
+                await jvc.connect()
                 info = await jvc.get_info()
             finally:
                 await jvc.disconnect()
@@ -381,9 +399,9 @@ async def _handle_creation(
         except Exception as ex:  # pylint: disable=broad-exception-caught
             _LOG.error("Unable to connect at IP: %s. Exception: %s", ip, ex)
             _LOG.info("Please check if you entered the correct ip of the projector")
-            return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+            return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
     else:
         _LOG.info("No ip address entered")
-        return SetupError()
+        return SetupError(IntegrationSetupError.OTHER)
     _LOG.info("Setup complete")
     return SetupComplete()

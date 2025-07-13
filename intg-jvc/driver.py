@@ -210,7 +210,7 @@ def _device_state_to_media_player_state(
 ) -> media_player.States:
     match device_state:
         case projector.PowerState.ON:
-            state = media_player.States.PLAYING
+            state = media_player.States.ON
         case projector.PowerState.OFF:
             state = media_player.States.OFF
         case projector.PowerState.STANDBY:
@@ -259,7 +259,7 @@ async def on_device_update(entity_id: str, update: dict[str, Any] | None) -> Non
                     ]
 
             if "source" in update:
-                attributes[media_player.Attributes.MEDIA_TITLE] = update["source"]
+                attributes[media_player.Attributes.SOURCE] = update["source"].upper()
 
             if media_player.Attributes.STATE in attributes:
                 if attributes[media_player.Attributes.STATE] in [
@@ -267,9 +267,6 @@ async def on_device_update(entity_id: str, update: dict[str, Any] | None) -> Non
                     media_player.States.STANDBY,
                 ]:
                     attributes[media_player.Attributes.SOURCE] = ""
-                    attributes[media_player.Attributes.VOLUME] = ""
-                    attributes[media_player.Attributes.MUTED] = False
-                    attributes[media_player.Attributes.SOUND_MODE] = ""
 
         if attributes:
             if api.configured_entities.contains(identifier):

@@ -59,7 +59,7 @@ class JVCProjector:
         )
         self._connection_attempts: int = 0
         self._state: PowerState = PowerState.OFF
-        self._source_list: list[str] = self._device.input_list or []
+        self._source_list: list[str] = []
         self._active_source: str = ""
         self._features: dict = {}
         self._signal: str = ""
@@ -163,10 +163,8 @@ class JVCProjector:
             self.address,
         )
         try:
-            jvc = JvcProjector(
-                host=self._device.address, password=self._device.password
-            )
-            self._state = await jvc.get_power()
+            await self._jvc_projector.connect()
+            self._state = await self._jvc_projector.get_power()
         except aiohttp.ClientError as err:
             _LOG.error("[%s] Connection error: %s", self.log_id, err)
             self._state = PowerState.OFF
@@ -176,11 +174,9 @@ class JVCProjector:
         update = {}
 
         try:
-            jvc = JvcProjector(
-                host=self._device.address, password=self._device.password
-            )
-            state = await jvc.get_state()
-            self._state = PowerState(state["power"])
+            await self._jvc_projector.connect()
+            state = await self._jvc_projector.get_state()
+            self._state = PowerState(state["power", ""].upper())
             self._active_source = state["input"].upper()
             self._signal = state["source"].upper()
 
@@ -188,8 +184,8 @@ class JVCProjector:
             _LOG.error("[%s] Error retrieving status: %s", self.log_id, err)
 
         self._source_list = [
-            "hdmi1",
-            "hdmi2",
+            "HDMI1",
+            "HDMI2",
         ]
 
         try:
