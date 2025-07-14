@@ -6,9 +6,7 @@ Media-player entity functions.
 
 import logging
 from typing import Any
-import asyncio
 import ucapi
-import ucapi.api as uc
 
 import projector
 from config import JVCDevice, create_entity_id
@@ -18,12 +16,7 @@ from ucapi import MediaPlayer, media_player, EntityTypes
 from ucapi.media_player import DeviceClasses, Attributes
 from jvcprojector import const as JvcConst
 
-_LOOP = asyncio.new_event_loop()
-asyncio.set_event_loop(_LOOP)
-
 _LOG = logging.getLogger(__name__)
-api = uc.IntegrationAPI(_LOOP)
-_configured_devices: dict[str, projector.JvcProjector] = {}
 
 features = [
     media_player.Features.ON_OFF,
