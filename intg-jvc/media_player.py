@@ -1,214 +1,307 @@
-#!/usr/bin/env python3
+"""
+Media-player entity functions.
 
-"""Module that includes functions to add a projector media player entity, poll attributes and the media player command handler"""
+:license: Mozilla Public License Version 2.0, see LICENSE for more details.
+"""
 
 import logging
 from typing import Any
-
+import asyncio
 import ucapi
+import ucapi.api as uc
 
-import config
-import driver
-from projector import Projector
+import projector
+from config import JVCDevice, create_entity_id
+from const import SimpleCommands
+import const
+from ucapi import MediaPlayer, media_player, EntityTypes
+from ucapi.media_player import DeviceClasses, Attributes
+from jvcprojector import const as JvcConst
+
+_LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(_LOOP)
 
 _LOG = logging.getLogger(__name__)
+api = uc.IntegrationAPI(_LOOP)
+_configured_devices: dict[str, projector.JvcProjector] = {}
+
+features = [
+    media_player.Features.ON_OFF,
+    media_player.Features.TOGGLE,
+    media_player.Features.DPAD,
+    media_player.Features.SELECT_SOURCE,
+    media_player.Features.MENU,
+    media_player.Features.INFO,
+    media_player.Features.SETTINGS,
+]
 
 
-async def mp_cmd_handler(
-    entity: ucapi.MediaPlayer, cmd_id: str, _params: dict[str, Any] | None
-) -> ucapi.StatusCodes:
-    """
-    Media Player command handler.
+class JVCMediaPlayer(MediaPlayer):
+    """Representation of a JVC MediaPlayer entity."""
 
-    Called by the integration-API if a command is sent to a configured media_player-entity.
+    def __init__(self, config_device: JVCDevice, device: projector.JVCProjector):
+        """Initialize the class."""
+        self._device = device
+        _LOG.debug("JVC Media Player init")
+        entity_id = create_entity_id(config_device.identifier, EntityTypes.MEDIA_PLAYER)
+        self.config = config_device
 
-    :param entity: media_player entity
-    :param cmd_id: command
-    :param _params: optional command parameters
-    :return: status of the command
-    """
-    password = None
-    try:
-        ip = config.Setup.get("ip")
-        try:
-            password = config.Setup.get("password")
-        except ValueError:
-            _LOG.debug("No password set")
-        api = Projector(ip, password)
-    except ValueError as v:
-        _LOG.error(v)
-        return ucapi.StatusCodes.SERVER_ERROR
+        super().__init__(
+            entity_id,
+            config_device.name,
+            features,
+            attributes={
+                Attributes.STATE: device.state,
+                Attributes.SOURCE: device.source if device.source else "",
+                Attributes.SOURCE_LIST: device.source_list,
+            },
+            device_class=DeviceClasses.TV,
+            options={
+                media_player.Options.SIMPLE_COMMANDS: [
+                    member.value for member in SimpleCommands
+                ]
+            },
+            cmd_handler=self.media_player_cmd_handler,
+        )
 
-    try:
-        if _params is None:
-            _LOG.info("Received %s command for %s", cmd_id, entity.id)
-            await api.send_cmd(entity.id, cmd_id)
-        else:
-            _LOG.info(
-                "Received %s command with parameter %s for %s",
-                cmd_id,
-                _params,
-                entity.id,
-            )
-            await api.send_cmd(entity.id, cmd_id, _params)
-    except Exception as e:
-        if e is None:
-            return ucapi.StatusCodes.SERVER_ERROR
-        return ucapi.StatusCodes.BAD_REQUEST
-    return ucapi.StatusCodes.OK
+    # pylint: disable=too-many-statements
+    async def media_player_cmd_handler(
+        self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None
+    ) -> ucapi.StatusCodes:
+        """
+        Media-player entity command handler.
 
+        Called by the integration-API if a command is sent to a configured media-player entity.
 
-async def add_mp(ent_id: str, name: str):
-    """Function to add a media player entity with the config.MpDef class definition"""
-
-    _LOG.info(
-        "Add projector media player entity with id " + ent_id + " and name " + name
-    )
-
-    definition = ucapi.MediaPlayer(
-        ent_id,
-        name,
-        features=config.MpDef.features,
-        attributes=config.MpDef.attributes,
-        device_class=config.MpDef.device_class,
-        options=config.MpDef.options,
-        cmd_handler=mp_cmd_handler,
-    )
-
-    _LOG.debug("Projector media player entity definition created")
-
-    driver.api.available_entities.add(definition)
-
-    _LOG.info("Added projector media player entity")
-
-
-async def create_mp_poller(ent_id: str, ip: str, password: str | None = None):
-    """Creates a task to regularly poll attributes from the projector"""
-
-    mp_poller_interval = config.Setup.get("mp_poller_interval")
-
-    if mp_poller_interval == 0:
+        :param entity: media-player entity
+        :param cmd_id: command
+        :param params: optional command parameters
+        :return: status code of the command. StatusCodes.OK if the command succeeded.
+        """
         _LOG.info(
-            "Projector attributes poller interval set to "
-            + str(mp_poller_interval)
-            + ". Task will not be started"
+            "Got %s command request: %s %s", entity.id, cmd_id, params if params else ""
         )
-    else:
-        driver.loop.create_task(
-            mp_poller(ent_id, mp_poller_interval, ip, password), name="mp_poller"
-        )
-        _LOG.debug(
-            "Started projector attributes poller task with an interval of "
-            + str(mp_poller_interval)
-            + " seconds"
-        )
-
-
-async def mp_poller(
-    entity_id: str, interval: int, ip: str, password: str | None = None
-) -> None:
-    """Projector attributes poller task"""
-    while True:
-        await driver.asyncio.sleep(interval)
-        # TODO Implement check if there are too many timeouts to the projector and automatically deactivate poller and set entity status to unknown
-        # TODO #WAIT Check if there are configured entities using the get_configured_entities api request once the UC Python library supports this
-        if config.Setup.get("standby"):
-            continue
-        try:
-            # TODO Add check if network and remote is reachable
-            await update_mp(entity_id, ip, password)
-        except Exception as e:
-            _LOG.warning(e)
-
-
-async def update_mp(entity_id: str, ip: str, password: str | None = None):
-    """Retrieve input source, power state and muted state from the projector, compare them with the known state on the remote and update them if necessary"""
-
-    try:
-        source = None
-        api = Projector(ip, password)
-        state = api.get_attr_power()
-        _LOG.debug(
-            "Projector State: %s - UC State on: %s", state, ucapi.media_player.States.ON
-        )
-        if state == ucapi.media_player.States.ON:
-            source = api.get_attr_source()
-    except Exception as e:
-        raise Exception(e) from e
-
-    try:
-        stored_states = await driver.api.available_entities.get_states()
-    except Exception as e:
-        raise Exception(e) from e
-
-    if stored_states != []:
-        attributes_stored = stored_states[0][
-            "attributes"
-        ]  # [0] = 1st entity that has been added
-    else:
-        raise Exception(
-            "Got empty states from remote. Please make sure to add configured entities"
-        )
-
-    stored_attributes = {
-        "state": attributes_stored["state"],
-        "source": attributes_stored["source"],
-    }
-    current_attributes = {"state": state, "source": source}
-
-    attributes_to_check = ["state"]
-    if state == ucapi.media_player.States.ON:
-        attributes_to_check.append("source")
-    attributes_to_update = []
-    attributes_to_skip = []
-
-    for attribute in attributes_to_check:
-        if current_attributes[attribute] != stored_attributes[attribute]:
-            attributes_to_update.append(attribute)
-        else:
-            attributes_to_skip.append(attribute)
-
-    if not attributes_to_skip:
-        _LOG.debug(
-            "Entity attributes for "
-            + str(attributes_to_skip)
-            + " have not changed since the last update"
-        )
-
-    if attributes_to_update:
-        attributes_to_send = {}
-        if "state" in attributes_to_update:
-            attributes_to_send.update({ucapi.media_player.Attributes.STATE: state})
-        if "source" in attributes_to_update:
-            attributes_to_send.update({ucapi.media_player.Attributes.SOURCE: source})
 
         try:
-            if attributes_to_send:
-                api_update_attributes = (
-                    driver.api.configured_entities.update_attributes(
-                        entity_id, attributes_to_send
+            jvc = self._device
+            await jvc.connect()
+
+            match cmd_id:
+                case media_player.Commands.ON:
+                    _LOG.debug("Sending ON command to AVR")
+                    res = await jvc.send_command("powerOn")
+                case media_player.Commands.OFF:
+                    res = await jvc.send_command("powerOff")
+                case media_player.Commands.TOGGLE:
+                    res = await jvc.send_command("powerToggle")
+                case media_player.Commands.CURSOR_UP:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_UP)
+                case media_player.Commands.CURSOR_DOWN:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_DOWN)
+                case media_player.Commands.CURSOR_LEFT:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_LEFT)
+                case media_player.Commands.CURSOR_RIGHT:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_RIGHT)
+                case media_player.Commands.CURSOR_ENTER:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_OK)
+                case media_player.Commands.BACK:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_BACK)
+                case media_player.Commands.INFO:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_INFO)
+                case media_player.Commands.MENU:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_MENU)
+                case media_player.Commands.SELECT_SOURCE:
+                    await jvc.send_command(
+                        "setInput",
+                        source=params.get("source"),
                     )
-                )
-            else:
-                _LOG.debug("Nothing to update")
-        except Exception as e:
-            raise Exception(
-                "Error while updating attributes for entity id " + entity_id
-            ) from e
+                case SimpleCommands.REMOTE_ADVANCED_MENU:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_ADVANCED_MENU
+                    )
+                case SimpleCommands.REMOTE_PICTURE_MODE:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_PICTURE_MODE
+                    )
+                case SimpleCommands.REMOTE_COLOR_PROFILE:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_COLOR_PROFILE
+                    )
+                case SimpleCommands.REMOTE_LENS_CONTROL:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_LENS_CONTROL
+                    )
+                case SimpleCommands.REMOTE_SETTING_MEMORY:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_SETTING_MEMORY
+                    )
+                case SimpleCommands.REMOTE_GAMMA_SETTINGS:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_GAMMA_SETTINGS
+                    )
+                case SimpleCommands.REMOTE_CMD:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_CMD)
+                case SimpleCommands.REMOTE_MODE_1:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_MODE_1)
+                case SimpleCommands.REMOTE_MODE_2:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_MODE_2)
+                case SimpleCommands.REMOTE_MODE_3:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_MODE_3)
+                case SimpleCommands.REMOTE_LENS_AP:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_LENS_AP)
+                case SimpleCommands.REMOTE_ANAMO:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_ANAMO)
+                case SimpleCommands.REMOTE_GAMMA:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_GAMMA)
+                case SimpleCommands.REMOTE_COLOR_TEMP:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_COLOR_TEMP
+                    )
+                case SimpleCommands.REMOTE_3D_FORMAT:
+                    res = await jvc.send_command(
+                        "remote", code=JvcConst.REMOTE_3D_FORMAT
+                    )
+                case SimpleCommands.REMOTE_PIC_ADJ:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_PIC_ADJ)
+                case SimpleCommands.REMOTE_NATURAL:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_NATURAL)
+                case SimpleCommands.REMOTE_CINEMA:
+                    res = await jvc.send_command("remote", code=JvcConst.REMOTE_CINEMA)
+                case SimpleCommands.LENS_MEMORY_1:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_1)
+                case SimpleCommands.LENS_MEMORY_2:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_2)
+                case SimpleCommands.LENS_MEMORY_3:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_3)
+                case SimpleCommands.LENS_MEMORY_4:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_4)
+                case SimpleCommands.LENS_MEMORY_5:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_5)
+                case SimpleCommands.LENS_MEMORY_6:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_6)
+                case SimpleCommands.LENS_MEMORY_7:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_7)
+                case SimpleCommands.LENS_MEMORY_8:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_8)
+                case SimpleCommands.LENS_MEMORY_9:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_9)
+                case SimpleCommands.LENS_MEMORY_10:
+                    res = await jvc.send_command("operation", code=const.LENS_MEMORY_10)
+                case SimpleCommands.PICTURE_MODE_FILM:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_FILM
+                    )
+                case SimpleCommands.PICTURE_MODE_CINEMA:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_CINEMA
+                    )
+                case SimpleCommands.PICTURE_MODE_NATURAL:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_NATURAL
+                    )
+                case SimpleCommands.PICTURE_MODE_HDR10:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_HDR10
+                    )
+                case SimpleCommands.PICTURE_MODE_THX:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_THX
+                    )
+                case SimpleCommands.PICTURE_MODE_USER1:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER1
+                    )
+                case SimpleCommands.PICTURE_MODE_USER2:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER2
+                    )
+                case SimpleCommands.PICTURE_MODE_USER3:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER3
+                    )
+                case SimpleCommands.PICTURE_MODE_USER4:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER4
+                    )
+                case SimpleCommands.PICTURE_MODE_USER5:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER5
+                    )
+                case SimpleCommands.PICTURE_MODE_USER6:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_USER6
+                    )
+                case SimpleCommands.PICTURE_MODE_HLG:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_HLG
+                    )
+                case SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_FRAME_ADAPT_HDR
+                    )
+                case SimpleCommands.PICTURE_MODE_HDR10P:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_HDR10P
+                    )
+                case SimpleCommands.PICTURE_MODE_PANA_PQ:
+                    res = await jvc.send_command(
+                        "operation", code=const.PICTURE_MODE_PANA_PQ
+                    )
+                case SimpleCommands.LOW_LATENCY_ON:
+                    res = await jvc.send_command("operation", code=const.LOW_LATENCY_ON)
+                case SimpleCommands.LOW_LATENCY_OFF:
+                    res = await jvc.send_command(
+                        "operation", code=const.LOW_LATENCY_OFF
+                    )
+                case SimpleCommands.MASK_OFF:
+                    res = await jvc.send_command("operation", code=const.MASK_OFF)
+                case SimpleCommands.MASK_CUSTOM1:
+                    res = await jvc.send_command("operation", code=const.MASK_CUSTOM1)
+                case SimpleCommands.MASK_CUSTOM2:
+                    res = await jvc.send_command("operation", code=const.MASK_CUSTOM2)
+                case SimpleCommands.MASK_CUSTOM3:
+                    res = await jvc.send_command("operation", code=const.MASK_CUSTOM3)
+                case SimpleCommands.LAMP_LOW:
+                    res = await jvc.send_command("operation", code=const.LAMP_LOW)
+                case SimpleCommands.LAMP_MID:
+                    res = await jvc.send_command("operation", code=const.LAMP_MID)
+                case SimpleCommands.LAMP_HIGH:
+                    res = await jvc.send_command("operation", code=const.LAMP_HIGH)
+                case SimpleCommands.LENS_APERTURE_OFF:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_APERTURE_OFF
+                    )
+                case SimpleCommands.LENS_APERTURE_AUTO1:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_APERTURE_AUTO1
+                    )
+                case SimpleCommands.LENS_APERTURE_AUTO2:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_APERTURE_AUTO2
+                    )
+                case SimpleCommands.LENS_ANIMORPHIC_OFF:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_ANIMORPHIC_OFF
+                    )
+                case SimpleCommands.LENS_ANIMORPHIC_A:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_ANIMORPHIC_A
+                    )
+                case SimpleCommands.LENS_ANIMORPHIC_B:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_ANIMORPHIC_B
+                    )
+                case SimpleCommands.LENS_ANIMORPHIC_C:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_ANIMORPHIC_C
+                    )
+                case SimpleCommands.LENS_ANIMORPHIC_D:
+                    res = await jvc.send_command(
+                        "operation", code=const.LENS_ANIMORPHIC_D
+                    )
 
-        if not api_update_attributes:
-            raise Exception(
-                "Entity "
-                + entity_id
-                + " not found. Please make sure it's added as a configured entity on the remote"
-            )
-        else:
-            _LOG.info(
-                "Updated entity attribute(s) "
-                + str(attributes_to_update)
-                + " for "
-                + entity_id
-            )
-
-    else:
-        _LOG.debug("No projector attributes to update. Skipping update process")
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOG.error("Error executing command %s: %s", cmd_id, ex)
+            return ucapi.StatusCodes.BAD_REQUEST
+        _LOG.debug("Command %s executed successfully: %s", cmd_id, res)
+        return ucapi.StatusCodes.OK

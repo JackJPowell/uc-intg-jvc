@@ -1,267 +1,195 @@
-"""This module contains some fixed variables, the media player entity definition class and the Setup class which includes all fixed and customizable variables"""
+"""This module contains some fixed variables, the media player entity definition class
+and the Setup class which includes all fixed and customizable variables"""
 
+import dataclasses
 import json
-import os
 import logging
-import ucapi
+import os
+from asyncio import Lock
+from dataclasses import dataclass
+from typing import Iterator
+
+from ucapi import EntityTypes
 
 _LOG = logging.getLogger(__name__)
-
-# TODO Integrate SDCP and SDAP port and PJTalk community as variables into the command handlers to replace the pySDCP default values
-# TODO Make SDCP & SDAP ports and PJTalk community user configurable in an advanced setup option
-
-# Fixed variables
-SDCP_PORT = 53484  # Currently only used for port check during setup
-SDAP_PORT = 53862  # Currently only used for port check during setup
-
-simple_commands = [
-    "LENS_MEMORY_1",
-    "LENS_MEMORY_2",
-    "LENS_MEMORY_3",
-    "LENS_MEMORY_4",
-    "LENS_MEMORY_5",
-    "LENS_MEMORY_6",
-    "LENS_MEMORY_7",
-    "LENS_MEMORY_8",
-    "LENS_MEMORY_9",
-    "LENS_MEMORY_10",
-    "INPUT_HDMI_1",
-    "INPUT_HDMI_2",
-    "PICTURE_MODE_FILM",
-    "PICTURE_MODE_CINEMA",
-    "PICTURE_MODE_NATURAL",
-    "PICTURE_MODE_HDR10",
-    "PICTURE_MODE_THX",
-    "PICTURE_MODE_USER1",
-    "PICTURE_MODE_USER2",
-    "PICTURE_MODE_USER3",
-    "PICTURE_MODE_USER4",
-    "PICTURE_MODE_USER5",
-    "PICTURE_MODE_USER6",
-    "PICTURE_MODE_HLG",
-    "PICTURE_MODE_FRAME_ADAPT_HDR",
-    "PICTURE_MODE_HDR10P",
-    "PICTURE_MODE_PANA_PQ",
-    "LOW_LATENCY_ON",
-    "LOW_LATENCY_OFF",
-    "MASK_OFF",
-    "MASK_CUSTOM1",
-    "MASK_CUSTOM2",
-    "MASK_CUSTOM3",
-    "LAMP_LOW",
-    "LAMP_MID",
-    "LAMP_HIGH",
-    "LENS_APERTURE_OFF",
-    "LENS_APERTURE_AUTO1",
-    "LENS_APERTURE_AUTO2",
-    "LENS_ANIMORPHIC_OFF",
-    "LENS_ANIMORPHIC_A",
-    "LENS_ANIMORPHIC_B",
-    "LENS_ANIMORPHIC_C",
-    "LENS_ANIMORPHIC_D",
-]
+_CFG_FILENAME = "config.json"
 
 
-class MpDef:
-    """Media player entity definition class that includes the device class, features, attributes and options"""
-
-    device_class = ucapi.media_player.DeviceClasses.TV
-    features = [
-        ucapi.media_player.Features.ON_OFF,
-        ucapi.media_player.Features.TOGGLE,
-        ucapi.media_player.Features.DPAD,
-        ucapi.media_player.Features.HOME,
-        ucapi.media_player.Features.SELECT_SOURCE,
-    ]
-    attributes = {
-        ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNKNOWN,
-        ucapi.media_player.Attributes.SOURCE: "",
-        ucapi.media_player.Attributes.SOURCE_LIST: ["HDMI 1", "HDMI 2"],
-    }
-    options = {ucapi.media_player.Options.SIMPLE_COMMANDS: simple_commands}
+def create_entity_id(device_id: str, entity_type: EntityTypes) -> str:
+    """Create a unique entity identifier for the given receiver and entity type."""
+    return f"{entity_type.value}.{device_id}"
 
 
-class RemoteDef:
-    """Remote entity definition class that includes the features, attributes and simple commands"""
+def device_from_entity_id(entity_id: str) -> str | None:
+    """
+    Return the id prefix of an entity_id.
 
-    features = [
-        ucapi.remote.Features.ON_OFF,
-        ucapi.remote.Features.TOGGLE,
-    ]
-    attributes = {ucapi.remote.Attributes.STATE: ucapi.remote.States.UNKNOWN}
-    simple_commands = simple_commands
+    :param entity_id: the entity identifier
+    :return: the device prefix, or None if entity_id doesn't contain a dot
+    """
+    return entity_id.split(".", 1)[1]
 
 
-class Setup:
-    """Setup class which includes all fixed and customizable variables including functions to set() and get() them from a runtime storage
-    which includes storing them in a json config file and as well as load() them from this file"""
+@dataclass
+class JVCDevice:
+    """JVC device configuration."""
 
-    __conf = {
-        "ip": "",
-        "id": "",
-        "name": "",
-        "password": "",
-        "setup_complete": False,
-        "setup_reconfigure": False,
-        "standby": False,
-        "bundle_mode": False,
-        "mp_poller_interval": 20,  # Use 0 to deactivate; will be automatically set to 0 when running on the remote (bundle_mode: True)
-        "cfg_path": "config.json",
-    }
-    __setters = [
-        "ip",
-        "id",
-        "name",
-        "password",
-        "setup_complete",
-        "setup_reconfigure",
-        "standby",
-        "bundle_mode",
-        "mp_poller_interval",
-        "cfg_path",
-        "rt-id",
-    ]
-    __storers = [
-        "setup_complete",
-        "ip",
-        "id",
-        "name",
-        "password",
-        "standby",
-    ]  # Skip runtime only related keys in config file
+    identifier: str
+    """Unique identifier of the device. (MAC Address)"""
+    name: str
+    """Friendly name of the device."""
+    address: str
+    """IP Address of device"""
+    password: str = ""
+    """Optional password for projector."""
 
-    @staticmethod
-    def get(key):
-        """Get the value from the specified key in __conf"""
-        if Setup.__conf[key] == "":
-            raise ValueError("Got empty value for key " + key + " from runtime storage")
-        return Setup.__conf[key]
 
-    @staticmethod
-    def set(key, value):
-        """Set and store a value for the specified key into the runtime storage and config file.
-        Storing setup_complete flag during reconfiguration will be ignored"""
-        if key in Setup.__setters:
-            if Setup.__conf["setup_reconfigure"] and key == "setup_complete":
-                _LOG.debug(
-                    "Ignore setting and storing setup_complete flag during reconfiguration"
+class _EnhancedJSONEncoder(json.JSONEncoder):
+    """Python dataclass json encoder."""
+
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        return super().default(o)
+
+
+class Devices:
+    """Integration driver configuration class. Manages all configured Apple TV devices."""
+
+    def __init__(self, data_path: str, add_handler, remove_handler):
+        """
+        Create a configuration instance for the given configuration path.
+
+        :param data_path: configuration path for the configuration file and client certificates.
+        """
+        self._data_path: str = data_path
+        self._cfg_file_path: str = os.path.join(data_path, _CFG_FILENAME)
+        self._config: list[JVCDevice] = []
+        self._add_handler = add_handler
+        self._remove_handler = remove_handler
+        self.load()
+        self._config_lock = Lock()
+
+    @property
+    def data_path(self) -> str:
+        """Return the configuration path."""
+        return self._data_path
+
+    def all(self) -> Iterator[JVCDevice]:
+        """Get an iterator for all device configurations."""
+        return iter(self._config)
+
+    def contains(self, device_id: str) -> bool:
+        """Check if there's a device with the given device identifier."""
+        for item in self._config:
+            if item.identifier == device_id:
+                return True
+        return False
+
+    def add_or_update(self, device: JVCDevice) -> None:
+        """
+        Add a new configured JVC Projector device and persist configuration.
+
+        The device is updated if it already exists in the configuration.
+        """
+        # duplicate check
+        if not self.update(device):
+            self._config.append(device)
+            self.store()
+            if self._add_handler is not None:
+                self._add_handler(device)
+
+    def get(self, device_id: str) -> JVCDevice | None:
+        """Get device configuration for given identifier."""
+        for item in self._config:
+            if item.identifier == device_id:
+                # return a copy
+                return dataclasses.replace(item)
+        return None
+
+    def update(self, device: JVCDevice) -> bool:
+        """Update a configured Yamaha TV device and persist configuration."""
+        for item in self._config:
+            if item.identifier == device.identifier:
+                item.address = device.address
+                item.name = device.name
+                item.password = device.password
+                return self.store()
+        return False
+
+    def remove(self, device_id: str) -> bool:
+        """Remove the given device configuration."""
+        device = self.get(device_id)
+        if device is None:
+            return False
+        try:
+            self._config.remove(device)
+            if self._remove_handler is not None:
+                self._remove_handler(device)
+            return True
+        except ValueError:
+            pass
+        return False
+
+    def clear(self) -> None:
+        """Remove the configuration file."""
+        self._config = []
+
+        if os.path.exists(self._cfg_file_path):
+            os.remove(self._cfg_file_path)
+
+        if self._remove_handler is not None:
+            self._remove_handler(None)
+
+    def store(self) -> bool:
+        """
+        Store the configuration file.
+
+        :return: True if the configuration could be saved.
+        """
+        try:
+            with open(self._cfg_file_path, "w+", encoding="utf-8") as f:
+                json.dump(self._config, f, ensure_ascii=False, cls=_EnhancedJSONEncoder)
+            return True
+        except OSError as err:
+            _LOG.error("Cannot write the config file: %s", err)
+
+        return False
+
+    def load(self) -> bool:
+        """
+        Load the config into the config global variable.
+
+        :return: True if the configuration could be loaded.
+        """
+        try:
+            with open(self._cfg_file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for item in data:
+                # not using JVCDevice(**item) to be able to migrate
+                # old configuration files with missing attributes
+                device = JVCDevice(
+                    item.get("identifier"),
+                    item.get("name", ""),
+                    item.get("address"),
+                    item.get("password", ""),
                 )
-            else:
-                Setup.__conf[key] = value
-                _LOG.debug("Stored %s: %s into runtime storage", key, str(value))
+                self._config.append(device)
+            return True
+        except OSError as err:
+            _LOG.error("Cannot open the config file: %s", err)
+        except (AttributeError, ValueError, TypeError) as err:
+            _LOG.error("Empty or invalid config file: %s", err)
 
-                # Store key/value pair in config file
-                if key in Setup.__storers:
-                    jsondata = {key: value}
-                    if os.path.isfile(Setup.__conf["cfg_path"]):
-                        try:
-                            with open(
-                                Setup.__conf["cfg_path"], "r+", encoding="utf-8"
-                            ) as f:
-                                l = json.load(f)
-                                l.update(jsondata)
-                                f.seek(0)
-                                f.truncate()  # Needed when the new value has less characters than the old value (e.g. false to true)
-                                json.dump(l, f)
-                                _LOG.debug(
-                                    "Stored %s: %s into %s",
-                                    key,
-                                    str(value),
-                                    Setup.__conf["cfg_path"],
-                                )
-                        except OSError as o:
-                            raise OSError(o) from o
-                        except Exception as e:
-                            raise Exception(
-                                "Error while storing %s: %s into %s",
-                                key,
-                                str(value),
-                                Setup.__conf["cfg_path"],
-                            ) from e
+        return False
 
-                    # Create config file first if it doesn't exists yet
-                    else:
-                        # Skip storing setup_complete if no config files exists
-                        if key != "setup_complete":
-                            try:
-                                with open(
-                                    Setup.__conf["cfg_path"], "w", encoding="utf-8"
-                                ) as f:
-                                    json.dump(jsondata, f)
-                                _LOG.debug(
-                                    "Stored %s: %s into %s",
-                                    key,
-                                    str(value),
-                                    Setup.__conf["cfg_path"],
-                                )
-                            except OSError as o:
-                                raise OSError(o) from o
-                            except Exception as e:
-                                raise Exception(
-                                    "Error while storing %s: %s into %s",
-                                    key,
-                                    str(value),
-                                    Setup.__conf["cfg_path"],
-                                ) from e
-                else:
-                    _LOG.debug(
-                        "%s not found in __storers because it should not be stored in the config file",
-                        key,
-                    )
-        else:
-            raise NameError(
-                key + " not found in __setters because it should not be changed"
-            )
+    def migration_required(self) -> bool:
+        """Check if configuration migration is required."""
+        return False
 
-    @staticmethod
-    def load():
-        """Load all variables from the config json file into the runtime storage"""
-        if os.path.isfile(Setup.__conf["cfg_path"]):
-            try:
-                with open(Setup.__conf["cfg_path"], "r", encoding="utf-8") as f:
-                    configfile = json.load(f)
-            except Exception as e:
-                raise OSError("Error while reading " + Setup.__conf["cfg_path"]) from e
-            if configfile == "":
-                raise OSError("Error in " + Setup.__conf["cfg_path"] + ". No data")
+    async def migrate(self) -> bool:
+        """Migrate configuration if required."""
+        return True
 
-            Setup.__conf["setup_complete"] = configfile["setup_complete"]
-            _LOG.debug(
-                "Loaded setup_complete: %s into runtime storage from %s",
-                str(configfile["setup_complete"]),
-                Setup.__conf["cfg_path"],
-            )
 
-            if not Setup.__conf["setup_complete"]:
-                _LOG.warning(
-                    "The setup was not completed the last time. Please restart the setup process"
-                )
-            else:
-                if "ip" in configfile:
-                    Setup.__conf["ip"] = configfile["ip"]
-                    _LOG.debug(
-                        "Loaded ip into runtime storage from %s",
-                        Setup.__conf["cfg_path"],
-                    )
-                else:
-                    _LOG.debug(
-                        "Skip loading ip as it's not yet stored in the config file"
-                    )
-
-                if "id" and "name" in configfile:
-                    Setup.__conf["id"] = configfile["id"]
-                    Setup.__conf["name"] = configfile["name"]
-                    _LOG.debug(
-                        "Loaded id and name into runtime storage from %s",
-                        Setup.__conf["cfg_path"],
-                    )
-                else:
-                    _LOG.debug(
-                        "Skip loading id and name as there are not yet stored in the config file"
-                    )
-
-        else:
-            _LOG.info(
-                "%s does not exist (yet). Please start the setup process",
-                Setup.__conf["cfg_path"],
-            )
+devices: Devices | None = None
