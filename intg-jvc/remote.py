@@ -115,38 +115,38 @@ class JVCRemote(Remote):
                 res = await jvc.send_command("powerToggle")
             elif cmd_id == Commands.SEND_CMD:
                 match command:
-                    case media_player.Commands.ON:
+                    case media_player.Commands.ON | "ON":
                         _LOG.debug("Sending ON command to JVC")
                         res = await jvc.send_command("powerOn")
-                    case media_player.Commands.OFF:
+                    case media_player.Commands.OFF | "OFF":
                         res = await jvc.send_command("powerOff")
-                    case media_player.Commands.TOGGLE:
+                    case media_player.Commands.TOGGLE | "TOGGLE":
                         res = await jvc.send_command("powerToggle")
-                    case media_player.Commands.CURSOR_UP:
+                    case media_player.Commands.CURSOR_UP | "CURSOR_UP":
                         res = await jvc.send_command("remote", code=JvcConst.REMOTE_UP)
-                    case media_player.Commands.CURSOR_DOWN:
+                    case media_player.Commands.CURSOR_DOWN | "CURSOR_DOWN":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_DOWN
                         )
-                    case media_player.Commands.CURSOR_LEFT:
+                    case media_player.Commands.CURSOR_LEFT | "CURSOR_LEFT":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_LEFT
                         )
-                    case media_player.Commands.CURSOR_RIGHT:
+                    case media_player.Commands.CURSOR_RIGHT | "CURSOR_RIGHT":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_RIGHT
                         )
-                    case media_player.Commands.CURSOR_ENTER:
+                    case media_player.Commands.CURSOR_ENTER | "CURSOR_ENTER":
                         res = await jvc.send_command("remote", code=JvcConst.REMOTE_OK)
-                    case media_player.Commands.BACK:
+                    case media_player.Commands.BACK | "BACK":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_BACK
                         )
-                    case media_player.Commands.INFO:
+                    case media_player.Commands.INFO | "INFO":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_INFO
                         )
-                    case media_player.Commands.MENU:
+                    case media_player.Commands.MENU | "MENU":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_MENU
                         )
@@ -155,233 +155,240 @@ class JVCRemote(Remote):
                             "setInput",
                             source=params.get("source"),
                         )
-                    case SimpleCommands.REMOTE_ADVANCED_MENU:
+                    case "INPUT_HDMI_1":  # Special case for JVC HDMI 1 input
+                        await jvc.send_command("setInput", source="HDMI1")
+                    case "INPUT_HDMI_2":  # Special case for JVC HDMI 2 input
+                        await jvc.send_command("setInput", source="HDMI2")
+                    case SimpleCommands.REMOTE_ADVANCED_MENU | "REMOTE_ADVANCED_MENU":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_ADVANCED_MENU
                         )
-                    case SimpleCommands.REMOTE_PICTURE_MODE:
+                    case SimpleCommands.REMOTE_PICTURE_MODE | "REMOTE_PICTURE_MODE":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_PICTURE_MODE
                         )
-                    case SimpleCommands.REMOTE_COLOR_PROFILE:
+                    case SimpleCommands.REMOTE_COLOR_PROFILE | "REMOTE_COLOR_PROFILE":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_COLOR_PROFILE
                         )
-                    case SimpleCommands.REMOTE_LENS_CONTROL:
+                    case SimpleCommands.REMOTE_LENS_CONTROL | "REMOTE_LENS_CONTROL":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_LENS_CONTROL
                         )
-                    case SimpleCommands.REMOTE_SETTING_MEMORY:
+                    case SimpleCommands.REMOTE_SETTING_MEMORY | "REMOTE_SETTING_MEMORY":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_SETTING_MEMORY
                         )
-                    case SimpleCommands.REMOTE_GAMMA_SETTINGS:
+                    case SimpleCommands.REMOTE_GAMMA_SETTINGS | "REMOTE_GAMMA_SETTINGS":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_GAMMA_SETTINGS
                         )
-                    case SimpleCommands.REMOTE_CMD:
+                    case SimpleCommands.REMOTE_CMD | "REMOTE_CMD":
                         res = await jvc.send_command("remote", code=JvcConst.REMOTE_CMD)
-                    case SimpleCommands.REMOTE_MODE_1:
+                    case SimpleCommands.REMOTE_MODE_1 | "REMOTE_MODE_1":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_MODE_1
                         )
-                    case SimpleCommands.REMOTE_MODE_2:
+                    case SimpleCommands.REMOTE_MODE_2 | "REMOTE_MODE_2":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_MODE_2
                         )
-                    case SimpleCommands.REMOTE_MODE_3:
+                    case SimpleCommands.REMOTE_MODE_3 | "REMOTE_MODE_3":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_MODE_3
                         )
-                    case SimpleCommands.REMOTE_LENS_AP:
+                    case SimpleCommands.REMOTE_LENS_AP | "REMOTE_LENS_AP":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_LENS_AP
                         )
-                    case SimpleCommands.REMOTE_ANAMO:
+                    case SimpleCommands.REMOTE_ANAMO | "REMOTE_ANAMO":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_ANAMO
                         )
-                    case SimpleCommands.REMOTE_GAMMA:
+                    case SimpleCommands.REMOTE_GAMMA | "REMOTE_GAMMA":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_GAMMA
                         )
-                    case SimpleCommands.REMOTE_COLOR_TEMP:
+                    case SimpleCommands.REMOTE_COLOR_TEMP | "REMOTE_COLOR_TEMP":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_COLOR_TEMP
                         )
-                    case SimpleCommands.REMOTE_3D_FORMAT:
+                    case SimpleCommands.REMOTE_3D_FORMAT | "REMOTE_3D_FORMAT":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_3D_FORMAT
                         )
-                    case SimpleCommands.REMOTE_PIC_ADJ:
+                    case SimpleCommands.REMOTE_PIC_ADJ | "REMOTE_PIC_ADJ":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_PIC_ADJ
                         )
-                    case SimpleCommands.REMOTE_NATURAL:
+                    case SimpleCommands.REMOTE_NATURAL | "REMOTE_NATURAL":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_NATURAL
                         )
-                    case SimpleCommands.REMOTE_CINEMA:
+                    case SimpleCommands.REMOTE_CINEMA | "REMOTE_CINEMA":
                         res = await jvc.send_command(
                             "remote", code=JvcConst.REMOTE_CINEMA
                         )
-                    case SimpleCommands.LENS_MEMORY_1:
+                    case SimpleCommands.LENS_MEMORY_1 | "LENS_MEMORY_1":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_1
                         )
-                    case SimpleCommands.LENS_MEMORY_2:
+                    case SimpleCommands.LENS_MEMORY_2 | "LENS_MEMORY_2":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_2
                         )
-                    case SimpleCommands.LENS_MEMORY_3:
+                    case SimpleCommands.LENS_MEMORY_3 | "LENS_MEMORY_3":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_3
                         )
-                    case SimpleCommands.LENS_MEMORY_4:
+                    case SimpleCommands.LENS_MEMORY_4 | "LENS_MEMORY_4":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_4
                         )
-                    case SimpleCommands.LENS_MEMORY_5:
+                    case SimpleCommands.LENS_MEMORY_5 | "LENS_MEMORY_5":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_5
                         )
-                    case SimpleCommands.LENS_MEMORY_6:
+                    case SimpleCommands.LENS_MEMORY_6 | "LENS_MEMORY_6":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_6
                         )
-                    case SimpleCommands.LENS_MEMORY_7:
+                    case SimpleCommands.LENS_MEMORY_7 | "LENS_MEMORY_7":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_7
                         )
-                    case SimpleCommands.LENS_MEMORY_8:
+                    case SimpleCommands.LENS_MEMORY_8 | "LENS_MEMORY_8":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_8
                         )
-                    case SimpleCommands.LENS_MEMORY_9:
+                    case SimpleCommands.LENS_MEMORY_9 | "LENS_MEMORY_9":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_9
                         )
-                    case SimpleCommands.LENS_MEMORY_10:
+                    case SimpleCommands.LENS_MEMORY_10 | "LENS_MEMORY_10":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_MEMORY_10
                         )
-                    case SimpleCommands.PICTURE_MODE_FILM:
+                    case SimpleCommands.PICTURE_MODE_FILM | "PICTURE_MODE_FILM":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_FILM
                         )
-                    case SimpleCommands.PICTURE_MODE_CINEMA:
+                    case SimpleCommands.PICTURE_MODE_CINEMA | "PICTURE_MODE_CINEMA":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_CINEMA
                         )
-                    case SimpleCommands.PICTURE_MODE_NATURAL:
+                    case SimpleCommands.PICTURE_MODE_NATURAL | "PICTURE_MODE_NATURAL":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_NATURAL
                         )
-                    case SimpleCommands.PICTURE_MODE_HDR10:
+                    case SimpleCommands.PICTURE_MODE_HDR10 | "PICTURE_MODE_HDR10":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_HDR10
                         )
-                    case SimpleCommands.PICTURE_MODE_THX:
+                    case SimpleCommands.PICTURE_MODE_THX | "PICTURE_MODE_THX":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_THX
                         )
-                    case SimpleCommands.PICTURE_MODE_USER1:
+                    case SimpleCommands.PICTURE_MODE_USER1 | "PICTURE_MODE_USER1":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER1
                         )
-                    case SimpleCommands.PICTURE_MODE_USER2:
+                    case SimpleCommands.PICTURE_MODE_USER2 | "PICTURE_MODE_USER2":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER2
                         )
-                    case SimpleCommands.PICTURE_MODE_USER3:
+                    case SimpleCommands.PICTURE_MODE_USER3 | "PICTURE_MODE_USER3":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER3
                         )
-                    case SimpleCommands.PICTURE_MODE_USER4:
+                    case SimpleCommands.PICTURE_MODE_USER4 | "PICTURE_MODE_USER4":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER4
                         )
-                    case SimpleCommands.PICTURE_MODE_USER5:
+                    case SimpleCommands.PICTURE_MODE_USER5 | "PICTURE_MODE_USER5":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER5
                         )
-                    case SimpleCommands.PICTURE_MODE_USER6:
+                    case SimpleCommands.PICTURE_MODE_USER6 | "PICTURE_MODE_USER6":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_USER6
                         )
-                    case SimpleCommands.PICTURE_MODE_HLG:
+                    case SimpleCommands.PICTURE_MODE_HLG | "PICTURE_MODE_HLG":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_HLG
                         )
-                    case SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR:
+                    case (
+                        SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR
+                        | "PICTURE_MODE_FRAME_ADAPT_HDR"
+                    ):
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_FRAME_ADAPT_HDR
                         )
-                    case SimpleCommands.PICTURE_MODE_HDR10P:
+                    case SimpleCommands.PICTURE_MODE_HDR10P | "PICTURE_MODE_HDR10P":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_HDR10P
                         )
-                    case SimpleCommands.PICTURE_MODE_PANA_PQ:
+                    case SimpleCommands.PICTURE_MODE_PANA_PQ | "PICTURE_MODE_PANA_PQ":
                         res = await jvc.send_command(
                             "operation", code=const.PICTURE_MODE_PANA_PQ
                         )
-                    case SimpleCommands.LOW_LATENCY_ON:
+                    case SimpleCommands.LOW_LATENCY_ON | "LOW_LATENCY_ON":
                         res = await jvc.send_command(
                             "operation", code=const.LOW_LATENCY_ON
                         )
-                    case SimpleCommands.LOW_LATENCY_OFF:
+                    case SimpleCommands.LOW_LATENCY_OFF | "LOW_LATENCY_OFF":
                         res = await jvc.send_command(
                             "operation", code=const.LOW_LATENCY_OFF
                         )
-                    case SimpleCommands.MASK_OFF:
+                    case SimpleCommands.MASK_OFF | "MASK_OFF":
                         res = await jvc.send_command("operation", code=const.MASK_OFF)
-                    case SimpleCommands.MASK_CUSTOM1:
+                    case SimpleCommands.MASK_CUSTOM1 | "MASK_CUSTOM1":
                         res = await jvc.send_command(
                             "operation", code=const.MASK_CUSTOM1
                         )
-                    case SimpleCommands.MASK_CUSTOM2:
+                    case SimpleCommands.MASK_CUSTOM2 | "MASK_CUSTOM2":
                         res = await jvc.send_command(
                             "operation", code=const.MASK_CUSTOM2
                         )
-                    case SimpleCommands.MASK_CUSTOM3:
+                    case SimpleCommands.MASK_CUSTOM3 | "MASK_CUSTOM3":
                         res = await jvc.send_command(
                             "operation", code=const.MASK_CUSTOM3
                         )
-                    case SimpleCommands.LAMP_LOW:
+                    case SimpleCommands.LAMP_LOW | "LAMP_LOW":
                         res = await jvc.send_command("operation", code=const.LAMP_LOW)
-                    case SimpleCommands.LAMP_MID:
+                    case SimpleCommands.LAMP_MID | "LAMP_MID":
                         res = await jvc.send_command("operation", code=const.LAMP_MID)
-                    case SimpleCommands.LAMP_HIGH:
+                    case SimpleCommands.LAMP_HIGH | "LAMP_HIGH":
                         res = await jvc.send_command("operation", code=const.LAMP_HIGH)
-                    case SimpleCommands.LENS_APERTURE_OFF:
+                    case SimpleCommands.LENS_APERTURE_OFF | "LENS_APERTURE_OFF":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_APERTURE_OFF
                         )
-                    case SimpleCommands.LENS_APERTURE_AUTO1:
+                    case SimpleCommands.LENS_APERTURE_AUTO1 | "LENS_APERTURE_AUTO1":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_APERTURE_AUTO1
                         )
-                    case SimpleCommands.LENS_APERTURE_AUTO2:
+                    case SimpleCommands.LENS_APERTURE_AUTO2 | "LENS_APERTURE_AUTO2":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_APERTURE_AUTO2
                         )
-                    case SimpleCommands.LENS_ANIMORPHIC_OFF:
+                    case SimpleCommands.LENS_ANIMORPHIC_OFF | "LENS_ANIMORPHIC_OFF":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_ANIMORPHIC_OFF
                         )
-                    case SimpleCommands.LENS_ANIMORPHIC_A:
+                    case SimpleCommands.LENS_ANIMORPHIC_A | "LENS_ANIMORPHIC_A":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_ANIMORPHIC_A
                         )
-                    case SimpleCommands.LENS_ANIMORPHIC_B:
+                    case SimpleCommands.LENS_ANIMORPHIC_B | "LENS_ANIMORPHIC_B":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_ANIMORPHIC_B
                         )
-                    case SimpleCommands.LENS_ANIMORPHIC_C:
+                    case SimpleCommands.LENS_ANIMORPHIC_C | "LENS_ANIMORPHIC_C":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_ANIMORPHIC_C
                         )
-                    case SimpleCommands.LENS_ANIMORPHIC_D:
+                    case SimpleCommands.LENS_ANIMORPHIC_D | "LENS_ANIMORPHIC_D":
                         res = await jvc.send_command(
                             "operation", code=const.LENS_ANIMORPHIC_D
                         )
@@ -407,16 +414,26 @@ class JVCRemote(Remote):
 
 
 JVC_REMOTE_BUTTONS_MAPPING: [DeviceButtonMapping] = [  # type: ignore
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_UP, "CURSOR_UP"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_DOWN, "CURSOR_DOWN"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_LEFT, "CURSOR_LEFT"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_RIGHT, "CURSOR_RIGHT"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.DPAD_MIDDLE, "CURSOR_ENTER"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.GREEN, "BACK", "BACK"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.YELLOW, "MENU", "MENU"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.RED, "LENS_MEMORY_1", "LENS_MEMORY_2"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.BLUE, "INPUT_HDMI_1", "INPUT_HDMI_2"),
-    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.POWER, ucapi.remote.Commands.TOGGLE),
+    ucapi.ui.create_btn_mapping(
+        ucapi.ui.Buttons.DPAD_UP, media_player.Commands.CURSOR_UP
+    ),
+    ucapi.ui.create_btn_mapping(
+        ucapi.ui.Buttons.DPAD_DOWN, media_player.Commands.CURSOR_DOWN
+    ),
+    ucapi.ui.create_btn_mapping(
+        ucapi.ui.Buttons.DPAD_LEFT, media_player.Commands.CURSOR_LEFT
+    ),
+    ucapi.ui.create_btn_mapping(
+        ucapi.ui.Buttons.DPAD_RIGHT, media_player.Commands.CURSOR_RIGHT
+    ),
+    ucapi.ui.create_btn_mapping(
+        ucapi.ui.Buttons.DPAD_MIDDLE, media_player.Commands.CURSOR_ENTER
+    ),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.GREEN, media_player.Commands.BACK),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.YELLOW, media_player.Commands.MENU),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.RED, SimpleCommands.LENS_MEMORY_1),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.BLUE, "INPUT_HDMI_1"),
+    ucapi.ui.create_btn_mapping(ucapi.ui.Buttons.POWER, media_player.Commands.TOGGLE),
 ]
 
 
@@ -451,7 +468,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             1,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("MENU"),
+            cmd=media_player.Commands.MENU,
         )
     )
     ui_page1.add(
@@ -481,7 +498,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             3,
             size=ucapi.ui.Size(3, 1),
-            cmd=ucapi.remote.create_send_cmd("LOW_LATENCY_ON"),
+            cmd=SimpleCommands.LOW_LATENCY_ON,
         )
     )
     ui_page1.add(
@@ -490,7 +507,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             3,
             3,
             size=ucapi.ui.Size(3, 1),
-            cmd=ucapi.remote.create_send_cmd("LOW_LATENCY_OFF"),
+            cmd=SimpleCommands.LOW_LATENCY_OFF,
         )
     )
     ui_page1.add(
@@ -504,7 +521,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LAMP_LOW"),
+            cmd=SimpleCommands.LAMP_LOW,
         )
     )
     ui_page1.add(
@@ -513,7 +530,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LAMP_MID"),
+            cmd=SimpleCommands.LAMP_MID,
         )
     )
     ui_page1.add(
@@ -522,7 +539,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             4,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LAMP_HIGH"),
+            cmd=SimpleCommands.LAMP_HIGH,
         )
     )
 
@@ -533,7 +550,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             0,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_FILM"),
+            cmd=SimpleCommands.PICTURE_MODE_FILM,
         )
     )
     ui_page2.add(
@@ -542,7 +559,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             0,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_CINEMA"),
+            cmd=SimpleCommands.PICTURE_MODE_CINEMA,
         )
     )
     ui_page2.add(
@@ -551,7 +568,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             1,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_NATURAL"),
+            cmd=SimpleCommands.PICTURE_MODE_NATURAL,
         )
     )
     ui_page2.add(
@@ -560,7 +577,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             1,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_HDR10"),
+            cmd=SimpleCommands.PICTURE_MODE_HDR10,
         )
     )
     ui_page2.add(
@@ -569,7 +586,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_THX"),
+            cmd=SimpleCommands.PICTURE_MODE_THX,
         )
     )
     ui_page2.add(
@@ -578,7 +595,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER1"),
+            cmd=SimpleCommands.PICTURE_MODE_USER1,
         )
     )
     ui_page2.add(
@@ -587,7 +604,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER2"),
+            cmd=SimpleCommands.PICTURE_MODE_USER2,
         )
     )
     ui_page2.add(
@@ -596,7 +613,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER3"),
+            cmd=SimpleCommands.PICTURE_MODE_USER3,
         )
     )
     ui_page2.add(
@@ -605,7 +622,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             4,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER4"),
+            cmd=SimpleCommands.PICTURE_MODE_USER4,
         )
     )
     ui_page2.add(
@@ -614,7 +631,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             4,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER5"),
+            cmd=SimpleCommands.PICTURE_MODE_USER5,
         )
     )
     ui_page2.add(
@@ -623,7 +640,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_USER6"),
+            cmd=SimpleCommands.PICTURE_MODE_USER6,
         )
     )
     ui_page2.add(
@@ -632,7 +649,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_HLG"),
+            cmd=SimpleCommands.PICTURE_MODE_HLG,
         )
     )
     ui_page2.add(
@@ -641,7 +658,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             6,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_HDR10P"),
+            cmd=SimpleCommands.PICTURE_MODE_HDR10P,
         )
     )
     ui_page2.add(
@@ -650,7 +667,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             6,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_PANA_PQ"),
+            cmd=SimpleCommands.PICTURE_MODE_PANA_PQ,
         )
     )
     ui_page2.add(
@@ -659,7 +676,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             7,
             size=ucapi.ui.Size(4, 1),
-            cmd=ucapi.remote.create_send_cmd("PICTURE_MODE_FRAME_ADAPT_HDR"),
+            cmd=SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR,
         )
     )
 
@@ -673,7 +690,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             1,
             size=ucapi.ui.Size(4, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_OFF"),
+            cmd=SimpleCommands.LENS_ANIMORPHIC_OFF,
         )
     )
     ui_page3.add(
@@ -682,7 +699,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_A"),
+            cmd=SimpleCommands.LENS_ANIMORPHIC_A,
         )
     )
     ui_page3.add(
@@ -691,7 +708,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_B"),
+            cmd=SimpleCommands.LENS_ANIMORPHIC_B,
         )
     )
     ui_page3.add(
@@ -700,7 +717,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_C"),
+            cmd=SimpleCommands.LENS_ANIMORPHIC_C,
         )
     )
     ui_page3.add(
@@ -709,7 +726,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_ANIMORPHIC_D"),
+            cmd=SimpleCommands.LENS_ANIMORPHIC_D,
         )
     )
     ui_page3.add(
@@ -721,7 +738,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("MASK_OFF"),
+            cmd=SimpleCommands.MASK_OFF,
         )
     )
     ui_page3.add(
@@ -730,7 +747,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             5,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("MASK_CUSTOM1"),
+            cmd=SimpleCommands.MASK_CUSTOM1,
         )
     )
     ui_page3.add(
@@ -739,7 +756,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             6,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("MASK_CUSTOM2"),
+            cmd=SimpleCommands.MASK_CUSTOM2,
         )
     )
     ui_page3.add(
@@ -748,7 +765,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             6,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("MASK_CUSTOM3"),
+            cmd=SimpleCommands.MASK_CUSTOM3,
         )
     )
     ui_page3.add(
@@ -760,7 +777,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             8,
             size=ucapi.ui.Size(4, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_APERTURE_OFF"),
+            cmd=SimpleCommands.LENS_APERTURE_OFF,
         )
     )
     ui_page3.add(
@@ -769,7 +786,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             9,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_APERTURE_AUTO1"),
+            cmd=SimpleCommands.LENS_APERTURE_AUTO1,
         )
     )
     ui_page3.add(
@@ -778,7 +795,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             9,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_APERTURE_AUTO2"),
+            cmd=SimpleCommands.LENS_APERTURE_AUTO2,
         )
     )
     ui_page4 = ucapi.ui.UiPage("page4", "Lens Memory", grid=ucapi.ui.Size(4, 5))
@@ -788,7 +805,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             0,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_1"),
+            cmd=SimpleCommands.LENS_MEMORY_1,
         )
     )
     ui_page4.add(
@@ -797,7 +814,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             0,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_2"),
+            cmd=SimpleCommands.LENS_MEMORY_2,
         )
     )
     ui_page4.add(
@@ -806,7 +823,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             1,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_3"),
+            cmd=SimpleCommands.LENS_MEMORY_3,
         )
     )
     ui_page4.add(
@@ -815,7 +832,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             1,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_4"),
+            cmd=SimpleCommands.LENS_MEMORY_4,
         )
     )
     ui_page4.add(
@@ -824,7 +841,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_5"),
+            cmd=SimpleCommands.LENS_MEMORY_5,
         )
     )
     ui_page4.add(
@@ -833,7 +850,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             2,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_6"),
+            cmd=SimpleCommands.LENS_MEMORY_6,
         )
     )
     ui_page4.add(
@@ -842,7 +859,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_7"),
+            cmd=SimpleCommands.LENS_MEMORY_7,
         )
     )
     ui_page4.add(
@@ -851,7 +868,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             3,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_8"),
+            cmd=SimpleCommands.LENS_MEMORY_8,
         )
     )
     ui_page4.add(
@@ -860,7 +877,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             0,
             4,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_9"),
+            cmd=SimpleCommands.LENS_MEMORY_9,
         )
     )
     ui_page4.add(
@@ -869,7 +886,7 @@ def create_ui_pages() -> list[ucapi.ui.UiPage | dict[str, Any]]:
             2,
             4,
             size=ucapi.ui.Size(2, 1),
-            cmd=ucapi.remote.create_send_cmd("LENS_MEMORY_10"),
+            cmd=SimpleCommands.LENS_MEMORY_10,
         )
     )
 
