@@ -211,17 +211,19 @@ class JVCProjector:
             )
             match command:
                 case "powerOn":
-                    res = await self._jvc_projector.power_on()
+                    if self.state != PowerState.ON:
+                        res = await self._jvc_projector.power_on()
                     update["state"] = PowerState.ON
                 case "powerOff":
-                    res = await self._jvc_projector.power_off()
+                    if self.state == PowerState.ON:
+                        res = await self._jvc_projector.power_off()
                     update["state"] = PowerState.OFF
                 case "powerToggle":
                     power = await self._jvc_projector.get_power()
                     if power.upper() == PowerState.ON:
                         res = await self._jvc_projector.power_off()
                         update["state"] = PowerState.OFF
-                    elif power.upper() == PowerState.OFF:
+                    elif power.upper() in [PowerState.STANDBY, PowerState.OFF]:
                         res = await self._jvc_projector.power_on()
                         update["state"] = PowerState.ON
                 case "setInput":
