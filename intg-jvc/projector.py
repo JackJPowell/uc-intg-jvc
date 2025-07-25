@@ -214,18 +214,22 @@ class JVCProjector:
                 case "powerOn":
                     if self.state != PowerState.ON:
                         res = await self._jvc_projector.power_on()
+                    self._state = PowerState.ON
                     update["state"] = PowerState.ON
                 case "powerOff":
                     if self.state == PowerState.ON:
                         res = await self._jvc_projector.power_off()
-                    update["state"] = PowerState.OFF
+                    self._state = PowerState.STANDBY
+                    update["state"] = PowerState.STANDBY
                 case "powerToggle":
                     power = await self._jvc_projector.get_power()
                     if power.upper() == PowerState.ON:
                         res = await self._jvc_projector.power_off()
-                        update["state"] = PowerState.OFF
+                        self._state = PowerState.STANDBY
+                        update["state"] = PowerState.STANDBY
                     elif power.upper() in [PowerState.STANDBY, PowerState.OFF]:
                         res = await self._jvc_projector.power_on()
+                        self._state = PowerState.ON
                         update["state"] = PowerState.ON
                 case "setInput":
                     code = JvcConst.REMOTE_HDMI_1  # Default to HDMI1
