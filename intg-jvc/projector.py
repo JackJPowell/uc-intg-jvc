@@ -201,6 +201,7 @@ class JVCProjector:
     async def send_command(self, command: str, *args: Any, **kwargs: Any) -> str:
         """Send a command to the AVR."""
         update = {}
+        res = ""
         try:
             _LOG.debug(
                 "[%s] Sending command: %s, args: %s, kwargs: %s",
