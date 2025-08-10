@@ -389,7 +389,7 @@ async def _handle_creation(
             _LOG.debug("JVC Projector info: %s", info)
 
             device = JVCDevice(
-                identifier=info["mac"],
+                identifier=info.get("mac", info.get("model", "jvc")),
                 name=name,
                 address=ip,
                 password=password,
