@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This module implements a Remote Two integration driver for Apple TV devices.
+This module implements a Remote Two integration driver for JVC Projector devices.
 
 :copyright: (c) 2023-2024 by Unfolded Circle ApS.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
@@ -58,7 +58,7 @@ async def on_r2_enter_standby() -> None:
     """
     Enter standby notification from Remote Two.
 
-    Disconnect every Yamaha AVR instances.
+    Disconnect every JVC Projector instance.
     """
     _LOG.debug("Enter standby event: disconnecting device(s)")
     # for device in _configured_devices.values():
@@ -70,7 +70,7 @@ async def on_r2_exit_standby() -> None:
     """
     Exit standby notification from Remote Two.
 
-    Connect all AVR instances.
+    Connect all JVC Projector instances.
     """
     _LOG.debug("Exit standby event: connecting device(s)")
     for device in _configured_devices.values():
@@ -122,12 +122,17 @@ async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
         device_id = device_from_entity_id(entity_id)
         if device_id is None:
             continue
-        _configured_devices[device_id].events.remove_all_listeners()
+        if device_id in _configured_devices:
+            _configured_devices[device_id].events.remove_all_listeners()
+        else:
+            _LOG.warning(
+                "Attempted to unsubscribe from unknown device %s", device_id
+            )
 
 
 async def on_device_connected(device_id: str):
     """Handle device connection."""
-    _LOG.debug("JVC Projector connected: %s", device_id)
+    _LOG.debug("[%s] JVC Projector connected", device_id)
     state = media_player.States.UNKNOWN
     if device_id not in _configured_devices:
         _LOG.warning("JVC Projector %s is not configured", device_id)
@@ -159,7 +164,7 @@ async def on_device_connected(device_id: str):
 
 async def on_device_disconnected(device_id: str):
     """Handle device disconnection."""
-    _LOG.debug("JVC Projector disconnected: %s", device_id)
+    _LOG.debug("[%s] JVC Projector disconnected", device_id)
 
     for entity_id in _entities_from_device_id(device_id):
         configured_entity = api.configured_entities.get(entity_id)
@@ -182,7 +187,7 @@ async def on_device_disconnected(device_id: str):
 
 async def on_device_connection_error(device_id: str, message):
     """Set entities of JVC Projector to state UNAVAILABLE if device connection error occurred."""
-    _LOG.error(message)
+    _LOG.error("[%s] Connection error: %s", device_id, message)
 
     for entity_id in _entities_from_device_id(device_id):
         configured_entity = api.configured_entities.get(entity_id)
@@ -228,12 +233,21 @@ async def on_device_update(entity_id: str, update: dict[str, Any] | None) -> Non
     :param entity_id: Device media-player entity identifier
     :param update: dictionary containing the updated properties or None
     """
+    if update is None:
+        _LOG.warning("[%s] Received None update, ignoring", entity_id)
+        return
+        
     target_entity = None
     for identifier in _entities_from_device_id(entity_id):
         attributes = {}
         configured_entity = api.available_entities.get(identifier)
         if configured_entity is None:
-            return
+            _LOG.debug(
+                "[%s] Entity %s not found in available entities, skipping",
+                entity_id,
+                identifier,
+            )
+            continue
 
         if isinstance(configured_entity, JVCMediaPlayer):
             target_entity = api.available_entities.get(identifier)
@@ -351,18 +365,18 @@ def on_device_removed(device: JVCDevice | None) -> None:
         _LOG.debug(
             "Configuration cleared, disconnecting & removing all configured device instances"
         )
-        for device in _configured_devices.values():
-            # _LOOP.create_task(device.disconnect(continue_polling=False))
-            device.events.remove_all_listeners()
+        for configured_device in _configured_devices.values():
+            # _LOOP.create_task(configured_device.disconnect(continue_polling=False))
+            configured_device.events.remove_all_listeners()
         _configured_devices.clear()
         api.configured_entities.clear()
         api.available_entities.clear()
     else:
         if device.identifier in _configured_devices:
             _LOG.debug("Disconnecting from removed device %s", device.identifier)
-            device = _configured_devices.pop(device.identifier)
-            # _LOOP.create_task(device.disconnect(continue_polling=False))
-            device.events.remove_all_listeners()
+            configured_device = _configured_devices.pop(device.identifier)
+            # _LOOP.create_task(configured_device.disconnect(continue_polling=False))
+            configured_device.events.remove_all_listeners()
             entity_id = device.identifier
             api.configured_entities.remove(entity_id)
             api.available_entities.remove(entity_id)

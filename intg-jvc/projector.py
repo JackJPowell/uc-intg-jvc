@@ -94,7 +94,7 @@ class JVCProjector:
     @property
     def state(self) -> PowerState | None:
         """Return the device state."""
-        return self._state.upper()
+        return self._state
 
     @property
     def source_list(self) -> list[str]:
@@ -119,8 +119,9 @@ class JVCProjector:
         return updated_data
 
     async def connect(self) -> None:
-        """Establish connection to the AVR."""
-        if self.state != PowerState.OFF:
+        """Establish connection to the projector."""
+        if self._state != PowerState.OFF:
+            _LOG.debug("[%s] Already connected or connecting", self.log_id)
             return
 
         _LOG.debug("[%s] Connecting to device", self.log_id)
@@ -131,10 +132,10 @@ class JVCProjector:
         try:
             await self._connect()
 
-            if self.state != PowerState.OFF:
+            if self._state != PowerState.OFF:
                 _LOG.debug("[%s] Device is alive", self.log_id)
                 self.events.emit(
-                    EVENTS.UPDATE, self._device.identifier, {"state": self.state}
+                    EVENTS.UPDATE, self._device.identifier, {"state": self._state}
                 )
             else:
                 _LOG.debug("[%s] Device is not alive", self.log_id)
@@ -144,7 +145,8 @@ class JVCProjector:
                     {"state": PowerState.OFF},
                 )
         except asyncio.CancelledError:
-            pass
+            _LOG.debug("[%s] Connection cancelled", self.log_id)
+            raise
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.error("[%s] Could not connect: %s", self.log_id, err)
         finally:
@@ -158,28 +160,44 @@ class JVCProjector:
     async def _connect(self) -> None:
         """Connect to the device."""
         _LOG.debug(
-            "[%s] Connecting to TVWS device at IP address: %s",
+            "[%s] Connecting to JVC projector at IP address: %s",
             self.log_id,
             self.address,
         )
         try:
             await self._jvc_projector.connect()
-            self._state = await self._jvc_projector.get_power()
+            power = await self._jvc_projector.get_power()
+            # Normalize power state from API (may be lowercase) to PowerState enum
+            self._state = PowerState(power.upper() if isinstance(power, str) else power)
         except aiohttp.ClientError as err:
             _LOG.error("[%s] Connection error: %s", self.log_id, err)
             self._state = PowerState.OFF
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.error("[%s] Unexpected error during connection: %s", self.log_id, err)
+            self._state = PowerState.OFF
 
     async def _update_attributes(self) -> None:
-        _LOG.debug("[%s] Updating app list", self.log_id)
+        _LOG.debug("[%s] Updating device attributes", self.log_id)
         update = {}
 
         try:
             await self._jvc_projector.connect()
             state = await self._jvc_projector.get_state()
-            self._state = PowerState(state["power", ""].upper())
-            self._active_source = state["input"].upper()
-            self._signal = state["source"].upper()
 
+            power_value = state.get("power", "")
+            if power_value:
+                self._state = PowerState(power_value.upper())
+
+            input_value = state.get("input", "")
+            if input_value:
+                self._active_source = input_value.upper()
+
+            source_value = state.get("source", "")
+            if source_value:
+                self._signal = source_value.upper()
+
+        except (KeyError, ValueError) as err:
+            _LOG.error("[%s] Error parsing device state: %s", self.log_id, err)
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.error("[%s] Error retrieving status: %s", self.log_id, err)
 
@@ -189,12 +207,16 @@ class JVCProjector:
         ]
 
         try:
-            update["state"] = self.state
-            update["source"] = self.source.upper()
-            update["source_list"] = self.source_list
+            update["state"] = self._state
+            if self._active_source:
+                update["source"] = self._active_source
+            update["source_list"] = self._source_list
 
-        except Exception:  # pylint: disable=broad-exception-caught
-            _LOG.exception("[%s] App list: protocol error", self.log_id)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.exception(
+                "[%s] Error building update attributes: %s", self.log_id, err
+            )
+            return
 
         self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
 
@@ -213,23 +235,29 @@ class JVCProjector:
             match command:
                 case "powerOn":
                     power = await self._jvc_projector.get_power()
-                    if power.upper() in [PowerState.STANDBY, PowerState.OFF]:
+                    # Normalize power state from API to PowerState enum for comparison
+                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    if power_state in [PowerState.STANDBY, PowerState.OFF]:
                         res = await self._jvc_projector.power_on()
                     self._state = PowerState.ON
                     update["state"] = PowerState.ON
                 case "powerOff":
                     power = await self._jvc_projector.get_power()
-                    if power.upper() == PowerState.ON:
+                    # Normalize power state from API to PowerState enum for comparison
+                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    if power_state == PowerState.ON:
                         res = await self._jvc_projector.power_off()
                     self._state = PowerState.STANDBY
                     update["state"] = PowerState.STANDBY
                 case "powerToggle":
                     power = await self._jvc_projector.get_power()
-                    if power.upper() == PowerState.ON:
+                    # Normalize power state from API to PowerState enum for comparison
+                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    if power_state == PowerState.ON:
                         res = await self._jvc_projector.power_off()
                         self._state = PowerState.STANDBY
                         update["state"] = PowerState.STANDBY
-                    elif power.upper() in [PowerState.STANDBY, PowerState.OFF]:
+                    elif power_state in [PowerState.STANDBY, PowerState.OFF]:
                         res = await self._jvc_projector.power_on()
                         self._state = PowerState.ON
                         update["state"] = PowerState.ON
@@ -249,6 +277,14 @@ class JVCProjector:
 
             self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
             return res
+        except KeyError as err:
+            _LOG.error(
+                "[%s] Missing parameter for command %s: %s",
+                self.log_id,
+                command,
+                err,
+            )
+            raise
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.error(
                 "[%s] Error sending command %s: %s",
@@ -256,13 +292,14 @@ class JVCProjector:
                 command,
                 err,
             )
-            raise Exception(err) from err  # pylint: disable=broad-exception-raised
+            raise
 
     def simple_power(self, power: str) -> PowerState:
-        """Set the power state of the projector."""
-        if power in ["on", "warming"]:
+        """Convert power state string to PowerState enum."""
+        power_lower = power.lower()
+        if power_lower in ["on", "warming"]:
             return PowerState.ON
-        elif power in ["cooling", "standby", "off"]:
+        elif power_lower in ["cooling", "standby", "off"]:
             return PowerState.OFF
         else:
             raise ValueError(f"Unknown power state: {power}")
