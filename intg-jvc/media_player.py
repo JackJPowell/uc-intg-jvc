@@ -9,12 +9,12 @@ from typing import Any
 import ucapi
 
 import projector
-from config import JVCDevice, create_entity_id
-from const import SimpleCommands
+from const import SimpleCommands, JVCDevice
 import const
 from ucapi import MediaPlayer, media_player, EntityTypes
 from ucapi.media_player import DeviceClasses, Attributes
 from jvcprojector import const as JvcConst
+from ucapi_framework import create_entity_id
 
 _LOG = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class JVCMediaPlayer(MediaPlayer):
         """Initialize the class."""
         self._device = device
         _LOG.debug("JVC Media Player init")
-        entity_id = create_entity_id(config_device.identifier, EntityTypes.MEDIA_PLAYER)
+        entity_id = create_entity_id(EntityTypes.MEDIA_PLAYER, config_device.identifier)
         self.config = config_device
 
         super().__init__(
