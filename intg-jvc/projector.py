@@ -12,8 +12,9 @@ import aiohttp
 from const import JVCDevice
 from jvcprojector import const as JvcConst
 from jvcprojector.projector import JvcProjector
+from ucapi import EntityTypes
 from ucapi.media_player import Attributes as MediaAttr
-from ucapi_framework import BaseDeviceManager, StatelessHTTPDevice
+from ucapi_framework import BaseDeviceManager, StatelessHTTPDevice, create_entity_id
 from ucapi_framework.device import DeviceEvents
 
 _LOG = logging.getLogger(__name__)
@@ -128,7 +129,11 @@ class JVCProjector(StatelessHTTPDevice):
                 MediaAttr.SOURCE: self._active_source if self._active_source else "",
                 MediaAttr.SOURCE_LIST: self._source_list,
             }
-            self.events.emit(DeviceEvents.UPDATE, self.identifier, attributes)
+            self.events.emit(
+                DeviceEvents.UPDATE,
+                create_entity_id(EntityTypes.MEDIA_PLAYER, self.identifier),
+                attributes,
+            )
 
         except aiohttp.ClientError as err:
             _LOG.error("[%s] Connection verification failed: %s", self.name, err)
@@ -223,7 +228,11 @@ class JVCProjector(StatelessHTTPDevice):
 
             # Emit attribute updates to the Remote
             if attributes:
-                self.events.emit(DeviceEvents.UPDATE, self.identifier, attributes)
+                self.events.emit(
+                    DeviceEvents.UPDATE,
+                    create_entity_id(EntityTypes.MEDIA_PLAYER, self.identifier),
+                    attributes,
+                )
 
         except KeyError as err:
             _LOG.error(
