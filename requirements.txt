@@ -1,5 +1,5 @@
 ucapi==0.4.0
-ucapi-framework==1.0.1
+ucapi-framework==1.0.3
 aiohttp==3.9.3
 pyjvcprojector==1.1.2
 sddp-discovery-protocol==1.5.0

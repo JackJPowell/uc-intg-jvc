@@ -14,5 +14,5 @@ dependencies = [
     "sddp-discovery-protocol==1.5.0",
     "ssdp==1.3.0",
     "ucapi==0.4.0",
-    "ucapi-framework==1.0.1",
+    "ucapi-framework==1.0.3",
 ]

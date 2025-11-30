@@ -75,7 +75,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCDevice]):
         """
         Create JVC device configuration from manual entry.
 
-        :param input_values: User input containing 'ip' and 'volume_step'
+        :param input_values: User input containing 'address' and 'password' and 'name'
         :return: JVC device configuration or RequestUserInput to re-display form
         """
         address = input_values.get("address", "").strip()
@@ -89,7 +89,12 @@ class JVCSetupFlow(BaseSetupFlow[JVCDevice]):
 
         _LOG.debug("Connecting to JVC Projector at %s", address)
 
-        ip_address(address)
+        try:
+            address = ip_address(address)
+        except ValueError:
+            _LOG.error("Invalid IP address provided: %s", address)
+            _LOG.info("Please enter a valid IP address for the projector.")
+            return _MANUAL_INPUT_SCHEMA
 
         try:
             jvc = JvcProjector(address, password=password)
