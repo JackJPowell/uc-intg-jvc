@@ -7,7 +7,7 @@ from typing import Any
 import const
 import projector
 import ucapi
-from const import SimpleCommands, JVCDevice
+from const import SimpleCommands, JVCConfig
 from jvcprojector import const as JvcConst
 from ucapi import EntityTypes, Remote, StatusCodes, media_player
 from ucapi.media_player import States as MediaStates
@@ -30,7 +30,7 @@ JVC_REMOTE_STATE_MAPPING = {
 class JVCRemote(Remote):
     """Representation of a JVC Remote entity."""
 
-    def __init__(self, config_device: JVCDevice, device: projector.JVCProjector):
+    def __init__(self, config_device: JVCConfig, device: projector.JVCProjector):
         """Initialize the class."""
         self._device: projector.JVCProjector = device
         _LOG.debug("JVC Remote init")

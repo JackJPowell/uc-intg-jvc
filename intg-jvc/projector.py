@@ -9,12 +9,12 @@ from enum import StrEnum
 from typing import Any
 
 import aiohttp
-from const import JVCDevice
+from const import JVCConfig
 from jvcprojector import const as JvcConst
 from jvcprojector.projector import JvcProjector
 from ucapi import EntityTypes
 from ucapi.media_player import Attributes as MediaAttr
-from ucapi_framework import BaseDeviceManager, StatelessHTTPDevice, create_entity_id
+from ucapi_framework import BaseConfigManager, StatelessHTTPDevice, create_entity_id
 from ucapi_framework.device import DeviceEvents
 
 _LOG = logging.getLogger(__name__)
@@ -33,14 +33,16 @@ class JVCProjector(StatelessHTTPDevice):
 
     def __init__(
         self,
-        device: JVCDevice,
+        device_config: JVCConfig,
         loop: AbstractEventLoop | None,
-        config_manager: BaseDeviceManager | None = None,
+        config_manager: BaseConfigManager | None = None,
     ) -> None:
         """Create instance with stateless device base."""
-        super().__init__(device_config=device, loop=loop, config_manager=config_manager)
+        super().__init__(
+            device_config=device_config, loop=loop, config_manager=config_manager
+        )
         self._jvc_projector = JvcProjector(
-            host=device.address, password=device.password
+            host=device_config.address, password=device_config.password
         )
         self._source_list: list[str] = ["HDMI1", "HDMI2"]
         self._active_source: str = ""

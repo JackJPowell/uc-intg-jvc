@@ -4,7 +4,7 @@ import logging
 from ipaddress import ip_address
 from typing import Any
 
-from const import JVCDevice
+from const import JVCConfig
 from jvcprojector.projector import JvcProjector
 from ucapi import IntegrationSetupError, RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
@@ -54,7 +54,7 @@ _MANUAL_INPUT_SCHEMA = RequestUserInput(
 )
 
 
-class JVCSetupFlow(BaseSetupFlow[JVCDevice]):
+class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
     """
     Setup flow for JVC Projector integration.
 
@@ -71,7 +71,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCDevice]):
 
     async def query_device(
         self, input_values: dict[str, Any]
-    ) -> JVCDevice | SetupError | RequestUserInput:
+    ) -> JVCConfig | SetupError | RequestUserInput:
         """
         Create JVC device configuration from manual entry.
 
@@ -105,7 +105,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCDevice]):
                 await jvc.disconnect()
             _LOG.debug("JVC Projector info: %s", info)
 
-            return JVCDevice(
+            return JVCConfig(
                 identifier=info.get("mac", info.get("model", "jvc")),
                 name=name,
                 address=address,

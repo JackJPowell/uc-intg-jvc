@@ -6,7 +6,7 @@ from typing import Final
 
 
 @dataclass
-class JVCDevice:
+class JVCConfig:
     """JVC device configuration."""
 
     identifier: str

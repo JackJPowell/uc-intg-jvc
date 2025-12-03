@@ -9,7 +9,7 @@ from typing import Any
 import ucapi
 
 import projector
-from const import SimpleCommands, JVCDevice
+from const import SimpleCommands, JVCConfig
 import const
 from ucapi import MediaPlayer, media_player, EntityTypes
 from ucapi.media_player import DeviceClasses, Attributes
@@ -32,7 +32,7 @@ features = [
 class JVCMediaPlayer(MediaPlayer):
     """Representation of a JVC MediaPlayer entity."""
 
-    def __init__(self, config_device: JVCDevice, device: projector.JVCProjector):
+    def __init__(self, config_device: JVCConfig, device: projector.JVCProjector):
         """Initialize the class."""
         self._device = device
         _LOG.debug("JVC Media Player init")
