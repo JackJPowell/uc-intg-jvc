@@ -1,7 +1,23 @@
 """Constants for JVC Projector Integration"""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
+
+
+@dataclass
+class JVCConfig:
+    """JVC device configuration."""
+
+    identifier: str
+    """Unique identifier of the device. (MAC Address)"""
+    name: str
+    """Friendly name of the device."""
+    address: str
+    """IP Address of device"""
+    password: str = ""
+    """Optional password for projector."""
+
 
 LENS_MEMORY_1: Final = "INML0"
 LENS_MEMORY_2: Final = "INML1"

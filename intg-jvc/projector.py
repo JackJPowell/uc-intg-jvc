@@ -3,36 +3,21 @@ This module implements the JVC Projector communication of the Remote Two/3 integ
 
 """
 
-import asyncio
 import logging
 from asyncio import AbstractEventLoop
-from enum import StrEnum, IntEnum
-from typing import Any, ParamSpec, TypeVar
+from enum import StrEnum
+from typing import Any
 
 import aiohttp
-
-from jvcprojector.projector import JvcProjector
+from const import JVCConfig
 from jvcprojector import const as JvcConst
-from config import JVCDevice
-from pyee.asyncio import AsyncIOEventEmitter
+from jvcprojector.projector import JvcProjector
+from ucapi import EntityTypes
 from ucapi.media_player import Attributes as MediaAttr
+from ucapi_framework import BaseConfigManager, StatelessHTTPDevice, create_entity_id
+from ucapi_framework.device import DeviceEvents
 
 _LOG = logging.getLogger(__name__)
-
-
-class EVENTS(IntEnum):
-    """Internal driver events."""
-
-    CONNECTING = 0
-    CONNECTED = 1
-    DISCONNECTED = 2
-    PAIRED = 3
-    ERROR = 4
-    UPDATE = 5
-
-
-_JvcProjectorT = TypeVar("_JvcProjectorT", bound="JvcProjector")
-_P = ParamSpec("_P")
 
 
 class PowerState(StrEnum):
@@ -43,244 +28,218 @@ class PowerState(StrEnum):
     STANDBY = "STANDBY"
 
 
-class JVCProjector:
+class JVCProjector(StatelessHTTPDevice):
     """Representing a JVC Projector Device."""
 
     def __init__(
-        self, device: JVCDevice, loop: AbstractEventLoop | None = None
+        self,
+        device_config: JVCConfig,
+        loop: AbstractEventLoop | None,
+        config_manager: BaseConfigManager | None = None,
     ) -> None:
-        """Create instance."""
-        self._loop: AbstractEventLoop = loop or asyncio.get_running_loop()
-        self.events = AsyncIOEventEmitter(self._loop)
-        self._is_connected: bool = False
-        self._device: JVCDevice = device
-        self._jvc_projector = JvcProjector(
-            host=self._device.address, password=self._device.password
+        """Create instance with stateless device base."""
+        super().__init__(
+            device_config=device_config, loop=loop, config_manager=config_manager
         )
-        self._connection_attempts: int = 0
-        self._state: PowerState = PowerState.OFF
-        self._source_list: list[str] = []
+        self._jvc_projector = JvcProjector(
+            host=device_config.address, password=device_config.password
+        )
+        self._source_list: list[str] = ["HDMI1", "HDMI2"]
         self._active_source: str = ""
-        self._features: dict = {}
         self._signal: str = ""
-
-    @property
-    def device_config(self) -> JVCDevice:
-        """Return the device configuration."""
-        return self._device
 
     @property
     def identifier(self) -> str:
         """Return the device identifier."""
-        if not self._device.identifier:
-            raise ValueError("Instance not initialized, no identifier available")
-        return self._device.identifier
-
-    @property
-    def log_id(self) -> str:
-        """Return a log identifier."""
-        return self._device.name if self._device.name else self._device.identifier
+        return self._device_config.identifier
 
     @property
     def name(self) -> str:
         """Return the device name."""
-        return self._device.name
+        return self._device_config.name
 
     @property
     def address(self) -> str | None:
-        """Return the optional device address."""
-        return self._device.address
-
-    @property
-    def state(self) -> PowerState | None:
-        """Return the device state."""
-        return self._state
-
-    @property
-    def source_list(self) -> list[str]:
-        """Return a list of available input sources."""
-        return sorted(self._source_list)
+        """Return the device address."""
+        return self._device_config.address
 
     @property
     def source(self) -> str:
         """Return the current input source."""
-        return self._active_source
+        return self._active_source if self._active_source else ""
 
     @property
-    def attributes(self) -> dict[str, any]:
-        """Return the device attributes."""
-        updated_data = {
-            MediaAttr.STATE: self.state,
-        }
-        if self.source_list:
-            updated_data[MediaAttr.SOURCE_LIST] = self.source_list
-        if self.source:
-            updated_data[MediaAttr.SOURCE] = self.source
-        return updated_data
+    def source_list(self) -> list[str]:
+        """Return the list of available input sources."""
+        return self._source_list
 
-    async def connect(self) -> None:
-        """Establish connection to the projector."""
-        if self._state != PowerState.OFF:
-            _LOG.debug("[%s] Already connected or connecting", self.log_id)
-            return
+    @property
+    def state(self) -> PowerState | None:
+        """Return the current power state."""
+        return self._state
 
-        _LOG.debug("[%s] Connecting to device", self.log_id)
-        self.events.emit(EVENTS.CONNECTING, self._device.identifier)
-        await self._connect_setup()
+    @property
+    def log_id(self) -> str:
+        """Return a log identifier."""
+        return (
+            self._device_config.name
+            if self._device_config.name
+            else self._device_config.identifier
+        )
 
-    async def _connect_setup(self) -> None:
-        try:
-            await self._connect()
+    async def verify_connection(self) -> None:
+        """
+        Verify connection to the projector and emit current state.
 
-            if self._state != PowerState.OFF:
-                _LOG.debug("[%s] Device is alive", self.log_id)
-                self.events.emit(
-                    EVENTS.UPDATE, self._device.identifier, {"state": self._state}
-                )
-            else:
-                _LOG.debug("[%s] Device is not alive", self.log_id)
-                self.events.emit(
-                    EVENTS.UPDATE,
-                    self._device.identifier,
-                    {"state": PowerState.OFF},
-                )
-        except asyncio.CancelledError:
-            _LOG.debug("[%s] Connection cancelled", self.log_id)
-            raise
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            _LOG.error("[%s] Could not connect: %s", self.log_id, err)
-        finally:
-            _LOG.debug("[%s] Connect setup finished", self.log_id)
+        This method is called by the framework to check device connectivity
+        and retrieve the current state. State updates are emitted via DeviceEvents.UPDATE.
 
-        self.events.emit(EVENTS.CONNECTED, self._device.identifier)
-        _LOG.debug("[%s] Connected", self.log_id)
-
-        await self._update_attributes()
-
-    async def _connect(self) -> None:
-        """Connect to the device."""
+        :raises: Exception if connection verification fails
+        """
         _LOG.debug(
-            "[%s] Connecting to JVC projector at IP address: %s",
-            self.log_id,
+            "[%s] Verifying connection to JVC projector at IP address: %s",
+            self.name,
             self.address,
         )
-        try:
-            await self._jvc_projector.connect()
-            power = await self._jvc_projector.get_power()
-            # Normalize power state from API (may be lowercase) to PowerState enum
-            self._state = PowerState(power.upper() if isinstance(power, str) else power)
-        except aiohttp.ClientError as err:
-            _LOG.error("[%s] Connection error: %s", self.log_id, err)
-            self._state = PowerState.OFF
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            _LOG.error("[%s] Unexpected error during connection: %s", self.log_id, err)
-            self._state = PowerState.OFF
-
-    async def _update_attributes(self) -> None:
-        _LOG.debug("[%s] Updating device attributes", self.log_id)
-        update = {}
 
         try:
             await self._jvc_projector.connect()
-            state = await self._jvc_projector.get_state()
 
-            power_value = state.get("power", "")
-            if power_value:
-                self._state = PowerState(power_value.upper())
+            state_dict = await self._jvc_projector.get_state()
 
-            input_value = state.get("input", "")
+            self._state = PowerState(state_dict.get("power", "").upper())
+
+            # Extract input source safely
+            input_value = state_dict.get("input", "")
             if input_value:
                 self._active_source = input_value.upper()
 
-            source_value = state.get("source", "")
+            # Extract signal source safely
+            source_value = state_dict.get("source", "")
             if source_value:
                 self._signal = source_value.upper()
 
-        except (KeyError, ValueError) as err:
-            _LOG.error("[%s] Error parsing device state: %s", self.log_id, err)
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            _LOG.error("[%s] Error retrieving status: %s", self.log_id, err)
-
-        self._source_list = [
-            "HDMI1",
-            "HDMI2",
-        ]
-
-        try:
-            update["state"] = self._state
-            if self._active_source:
-                update["source"] = self._active_source
-            update["source_list"] = self._source_list
-
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            _LOG.exception(
-                "[%s] Error building update attributes: %s", self.log_id, err
+            _LOG.debug(
+                "[%s] Connection verified successfully, state: %s",
+                self.name,
+                self._state,
             )
-            return
 
-        self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
+            # Emit state update to the Remote
+            attributes = {
+                MediaAttr.STATE: self._state,
+                MediaAttr.SOURCE: self._active_source if self._active_source else "",
+                MediaAttr.SOURCE_LIST: self._source_list,
+            }
+            self.events.emit(
+                DeviceEvents.UPDATE,
+                create_entity_id(EntityTypes.MEDIA_PLAYER, self.identifier),
+                attributes,
+            )
 
-    async def send_command(self, command: str, *args: Any, **kwargs: Any) -> str:
-        """Send a command to the AVR."""
-        update = {}
-        res = ""
+        except aiohttp.ClientError as err:
+            _LOG.error("[%s] Connection verification failed: %s", self.name, err)
+            raise
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.error(
+                "[%s] Unexpected error during connection verification: %s",
+                self.name,
+                err,
+            )
+            raise
+
+    async def send_command(self, command: str, *args: Any, **kwargs: Any) -> None:
+        """
+        Send a command to the projector and emit state updates.
+
+        For stateless devices, emits the updated state after command execution
+        via DeviceEvents.UPDATE.
+
+        :param command: Command to send
+        :param args: Positional arguments
+        :param kwargs: Keyword arguments
+        """
         try:
             _LOG.debug(
                 "[%s] Sending command: %s, args: %s, kwargs: %s",
-                self.log_id,
+                self.name,
                 command,
                 args,
                 kwargs,
             )
+
+            attributes = {}
+
             match command:
                 case "powerOn":
                     power = await self._jvc_projector.get_power()
                     # Normalize power state from API to PowerState enum for comparison
-                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    power_state = PowerState(
+                        power.upper() if isinstance(power, str) else power
+                    )
                     if power_state in [PowerState.STANDBY, PowerState.OFF]:
-                        res = await self._jvc_projector.power_on()
-                    self._state = PowerState.ON
-                    update["state"] = PowerState.ON
+                        await self._jvc_projector.power_on()
+                    attributes[MediaAttr.STATE] = PowerState.ON
+
                 case "powerOff":
                     power = await self._jvc_projector.get_power()
                     # Normalize power state from API to PowerState enum for comparison
-                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    power_state = PowerState(
+                        power.upper() if isinstance(power, str) else power
+                    )
                     if power_state == PowerState.ON:
-                        res = await self._jvc_projector.power_off()
-                    self._state = PowerState.STANDBY
-                    update["state"] = PowerState.STANDBY
+                        await self._jvc_projector.power_off()
+                    attributes[MediaAttr.STATE] = PowerState.STANDBY
+
                 case "powerToggle":
                     power = await self._jvc_projector.get_power()
                     # Normalize power state from API to PowerState enum for comparison
-                    power_state = PowerState(power.upper() if isinstance(power, str) else power)
+                    power_state = PowerState(
+                        power.upper() if isinstance(power, str) else power
+                    )
                     if power_state == PowerState.ON:
-                        res = await self._jvc_projector.power_off()
-                        self._state = PowerState.STANDBY
-                        update["state"] = PowerState.STANDBY
+                        await self._jvc_projector.power_off()
+                        attributes[MediaAttr.STATE] = PowerState.STANDBY
                     elif power_state in [PowerState.STANDBY, PowerState.OFF]:
-                        res = await self._jvc_projector.power_on()
-                        self._state = PowerState.ON
-                        update["state"] = PowerState.ON
+                        await self._jvc_projector.power_on()
+                        attributes[MediaAttr.STATE] = PowerState.ON
+                    else:
+                        attributes[MediaAttr.STATE] = power_state
+
                 case "setInput":
                     code = JvcConst.REMOTE_HDMI_1  # Default to HDMI1
                     source = kwargs.get("source", "")
                     if source.upper() == "HDMI2":
                         code = JvcConst.REMOTE_HDMI_2
-                    res = await self._jvc_projector.remote(code)
-                    update["source"] = kwargs["source"].upper()
+                    await self._jvc_projector.remote(code)
+                    self._active_source = kwargs["source"].upper()
+                    attributes[MediaAttr.SOURCE] = self._active_source
+
                 case "remote":
                     code = kwargs.get("code")
-                    res = await self._jvc_projector.remote(code)
+                    await self._jvc_projector.remote(code)
+                    # Remote commands don't update attributes
+
                 case "operation":
                     code = kwargs.get("code")
-                    res = await self._jvc_projector.op(code)
+                    await self._jvc_projector.op(code)
+                    # Operation commands don't update attributes
 
-            self.events.emit(EVENTS.UPDATE, self._device.identifier, update)
-            return res
+                case _:
+                    _LOG.warning("[%s] Unknown command: %s", self.name, command)
+
+            # Emit attribute updates to the Remote
+            if attributes:
+                self.events.emit(
+                    DeviceEvents.UPDATE,
+                    create_entity_id(EntityTypes.MEDIA_PLAYER, self.identifier),
+                    attributes,
+                )
+
         except KeyError as err:
             _LOG.error(
                 "[%s] Missing parameter for command %s: %s",
-                self.log_id,
+                self.name,
                 command,
                 err,
             )
@@ -288,7 +247,7 @@ class JVCProjector:
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.error(
                 "[%s] Error sending command %s: %s",
-                self.log_id,
+                self.name,
                 command,
                 err,
             )
