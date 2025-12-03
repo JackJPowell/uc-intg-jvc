@@ -90,7 +90,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         _LOG.debug("Connecting to JVC Projector at %s", address)
 
         try:
-            address = ip_address(address)
+            address = ip_address(address).compressed
         except ValueError:
             _LOG.error("Invalid IP address provided: %s", address)
             _LOG.info("Please enter a valid IP address for the projector.")
