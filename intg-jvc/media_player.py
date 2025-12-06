@@ -74,10 +74,10 @@ class JVCMediaPlayer(MediaPlayer):
         _LOG.info(
             "Got %s command request: %s %s", entity.id, cmd_id, params if params else ""
         )
+        res = None
 
         try:
             jvc = self._device
-            await jvc.connect()
 
             match cmd_id:
                 case media_player.Commands.ON:

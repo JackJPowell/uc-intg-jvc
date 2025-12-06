@@ -105,7 +105,6 @@ class JVCRemote(Remote):
         jvc = self._device
         res = None
         try:
-            await jvc.connect()
             if command == "remote.on":
                 _LOG.debug("Sending ON command to JVC")
                 res = await jvc.send_command("powerOn")
