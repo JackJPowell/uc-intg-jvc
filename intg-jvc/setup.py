@@ -69,6 +69,24 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         """
         return _MANUAL_INPUT_SCHEMA
 
+    def get_additional_discovery_fields(self) -> list[dict]:
+        return [
+            {
+                "field": {"text": {"value": ""}},
+                "id": "name",
+                "label": {
+                    "en": "Projector Name",
+                },
+            },
+            {
+                "field": {"text": {"value": ""}},
+                "id": "password",
+                "label": {
+                    "en": "Password",
+                },
+            },
+        ]
+
     async def query_device(
         self, input_values: dict[str, Any]
     ) -> JVCConfig | SetupError | RequestUserInput:
@@ -80,7 +98,10 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         """
         address = input_values.get("address", "").strip()
         password = input_values.get("password", "").strip()
-        name = input_values.get("name", "JVC Projector").strip()
+        name = (input_values.get("name", "")).strip()
+
+        if not name or name == "":
+            name = "JVC Projector"
 
         if not address:
             # Re-display the form if address is missing

@@ -38,6 +38,7 @@ class JVCProjector(StatelessHTTPDevice):
         config_manager: BaseConfigManager | None = None,
     ) -> None:
         """Create instance with stateless device base."""
+        self._device_config: JVCConfig
         super().__init__(
             device_config=device_config, loop=loop, config_manager=config_manager
         )
