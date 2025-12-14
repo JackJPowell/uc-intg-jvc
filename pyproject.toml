@@ -1,6 +1,6 @@
 [project]
 name = "uc-intg-jvc"
-version = "1.0.1"
+version = "1.0.2"
 description = "Unfolded Circle JVC Projector Integration"
 readme = "README.md"
 requires-python = ">=3.11"
