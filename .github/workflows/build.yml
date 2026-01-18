@@ -9,7 +9,7 @@ name: "Build & Draft Release"
 env:
   INTG_NAME: jvc
   # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.12-0.3.0
+  PYTHON_VER: 3.11.12
 
 jobs:
   build:
