@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
 
 @dataclass
@@ -18,6 +18,62 @@ class JVCConfig:
     password: str = ""
     """Optional password for projector."""
 
+
+@dataclass
+class SensorConfig:
+    """Configuration for a sensor entity."""
+
+    identifier: str
+    """Unique identifier for the sensor (e.g., 'picture_mode'). Also used as key in state_dict."""
+    name: str
+    """Human-readable name for the sensor."""
+    query_command: str | None = None
+    """Query command to retrieve sensor value (e.g., 'PMPM' for picture mode)."""
+    unit: str | None = None
+    """Unit of measurement (optional)."""
+    default: str = ""
+    """Default value when sensor is unavailable."""
+    value: str | None = None
+    """Current runtime value of the sensor."""
+    entity: Any = None
+    """Reference to the registered sensor entity instance."""
+
+
+# Query command codes for sensors
+QUERY_INPUT: Final = "IP"
+QUERY_PICTURE_MODE: Final = "PMPM"
+QUERY_LOW_LATENCY: Final = "PMLL"
+QUERY_MASK: Final = "ISMA"
+QUERY_LAMP_POWER: Final = "PMLP"
+QUERY_LENS_APERTURE: Final = "PMDI"
+QUERY_ANAMORPHIC: Final = "INVS"
+QUERY_LENS_MEMORY: Final = "INML"  # Note: Read-only, no query available in protocol
+
+SENSORS: Final[tuple[SensorConfig, ...]] = (
+    SensorConfig(identifier="input", name="Input Source", query_command=QUERY_INPUT),
+    SensorConfig(identifier="source", name="Signal Status", query_command=None),
+    SensorConfig(
+        identifier="picture_mode", name="Picture Mode", query_command=QUERY_PICTURE_MODE
+    ),
+    SensorConfig(
+        identifier="low_latency", name="Low Latency", query_command=QUERY_LOW_LATENCY
+    ),
+    SensorConfig(identifier="mask", name="Screen Mask", query_command=QUERY_MASK),
+    SensorConfig(
+        identifier="lamp_power", name="Lamp Power", query_command=QUERY_LAMP_POWER
+    ),
+    SensorConfig(
+        identifier="lens_aperture",
+        name="Lens Aperture",
+        query_command=QUERY_LENS_APERTURE,
+    ),
+    SensorConfig(
+        identifier="anamorphic", name="Anamorphic", query_command=QUERY_ANAMORPHIC
+    ),
+    SensorConfig(
+        identifier="lens_memory", name="Lens Memory", query_command=QUERY_LENS_MEMORY
+    ),
+)
 
 LENS_MEMORY_1: Final = "INML0"
 LENS_MEMORY_2: Final = "INML1"
