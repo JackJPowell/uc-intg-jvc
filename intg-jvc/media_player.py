@@ -61,9 +61,6 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
             cmd_handler=self.media_player_cmd_handler,  # type: ignore[arg-type]
         )
 
-        # Register this media player entity with the device
-        self._device.register_entity(entity_id, self)
-
     # pylint: disable=too-many-statements
     async def media_player_cmd_handler(
         self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None

@@ -127,7 +127,6 @@ class JVCProjector(StatelessHTTPDevice):
                 "mask",
                 "lamp_power",
                 "lens_aperture",
-                "anamorphic",
             ]:
                 sensor = self.sensors.get(sensor_id)
                 if sensor and sensor.query_command:
@@ -191,7 +190,7 @@ class JVCProjector(StatelessHTTPDevice):
 
         # Format value based on sensor type
         if sensor_config.identifier in ["input", "source"]:
-            value = str(raw_value).upper() if raw_value else None
+            value = str(raw_value).upper() if raw_value is not None else None
         else:
             value = raw_value
 
@@ -202,6 +201,8 @@ class JVCProjector(StatelessHTTPDevice):
         elif self.state == media_player.States.STANDBY:
             sensor_state = SensorStates.UNAVAILABLE
 
+        # Return value if projector is ON, otherwise use default
+        # Use 'is not None' check to allow empty strings as valid values
         return SensorAttributes(
             STATE=sensor_state,
             VALUE=value
@@ -236,15 +237,23 @@ class JVCProjector(StatelessHTTPDevice):
             power_str = str(state_dict.get("power", ""))
             self._state = self._convert_power_state(power_str)
 
-            # Extract input source safely
+            # Extract input source safely and update sensor
             input_value = state_dict.get("input", "")
             if input_value:
                 self._active_source = input_value.upper()
+                # Update input sensor config
+                input_sensor = self.sensors.get("input")
+                if input_sensor:
+                    input_sensor.value = input_value
 
-            # Extract signal source safely
+            # Extract signal source safely and update sensor
             source_value = state_dict.get("source", "")
             if source_value:
                 self._signal = source_value.upper()
+                # Update source sensor config
+                source_sensor = self.sensors.get("source")
+                if source_sensor:
+                    source_sensor.value = source_value
 
             _LOG.debug(
                 "[%s] Connection verified successfully, state: %s",
@@ -383,7 +392,7 @@ class JVCProjector(StatelessHTTPDevice):
         :return: MediaPlayerAttributes for media player, SensorAttributes for sensors
         """
         # Check if this is a sensor entity by looking for the pattern
-        if ".sensor." in entity_id:
+        if "sensor." in entity_id:
             # Extract sensor identifier from entity_id using split
             # Format: sensor.{device_id}.{sensor_id}
             parts = entity_id.split(".", 2)

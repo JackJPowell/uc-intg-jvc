@@ -52,9 +52,6 @@ class JVCRemote(Remote):
             cmd_handler=self.command_handler,  # type: ignore[arg-type]
         )
 
-        # Register this remote entity with the device
-        self._device.register_entity(entity_id, self)
-
     def get_int_param(self, param: str, params: dict[str, Any], default: int):
         """Get parameter in integer format."""
         try:

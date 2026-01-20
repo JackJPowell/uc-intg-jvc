@@ -53,7 +53,7 @@ class JVCSensor(Sensor, FrameworkEntity):
 
         super().__init__(
             identifier=self._entity_id,
-            name=f"{config_device.name} {sensor_config.name}",
+            name=f"{sensor_config.name}",
             features=[],
             attributes=attributes,
             device_class=DeviceClasses.CUSTOM,

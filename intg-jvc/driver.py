@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 
-from const import JVCConfig
+from const import SENSORS, JVCConfig
 from discover import JVCProjectorDiscovery
 from media_player import JVCMediaPlayer
 from projector import JVCProjector
@@ -17,7 +17,6 @@ from remote import JVCRemote
 from sensor import JVCSensor
 from setup import JVCSetupFlow
 from ucapi_framework import BaseConfigManager, BaseIntegrationDriver, get_config_path
-from const import SENSORS
 
 _LOG = logging.getLogger("driver")
 
@@ -40,8 +39,7 @@ async def main():
             JVCMediaPlayer,
             JVCRemote,
             lambda cfg, dev: [
-                JVCSensor(cfg, dev, sensor_config)
-                for sensor_config in SENSORS
+                JVCSensor(cfg, dev, sensor_config) for sensor_config in SENSORS
             ],
         ],
     )

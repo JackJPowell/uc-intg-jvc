@@ -46,7 +46,6 @@ QUERY_LOW_LATENCY: Final = "PMLL"
 QUERY_MASK: Final = "ISMA"
 QUERY_LAMP_POWER: Final = "PMLP"
 QUERY_LENS_APERTURE: Final = "PMDI"
-QUERY_ANAMORPHIC: Final = "INVS"
 QUERY_LENS_MEMORY: Final = "INML"  # Note: Read-only, no query available in protocol
 
 SENSORS: Final[tuple[SensorConfig, ...]] = (
@@ -66,9 +65,6 @@ SENSORS: Final[tuple[SensorConfig, ...]] = (
         identifier="lens_aperture",
         name="Lens Aperture",
         query_command=QUERY_LENS_APERTURE,
-    ),
-    SensorConfig(
-        identifier="anamorphic", name="Anamorphic", query_command=QUERY_ANAMORPHIC
     ),
     SensorConfig(
         identifier="lens_memory", name="Lens Memory", query_command=QUERY_LENS_MEMORY
