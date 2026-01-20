@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final
 
+from jvcprojector import command
+
 
 @dataclass
 class JVCConfig:
@@ -27,8 +29,8 @@ class SensorConfig:
     """Unique identifier for the sensor (e.g., 'picture_mode'). Also used as key in state_dict."""
     name: str
     """Human-readable name for the sensor."""
-    query_command: str | None = None
-    """Query command to retrieve sensor value (e.g., 'PMPM' for picture mode)."""
+    query_command: Any = None
+    """Query command class to retrieve sensor value (e.g., command.PictureMode)."""
     unit: str | None = None
     """Unit of measurement (optional)."""
     default: str = ""
@@ -39,80 +41,33 @@ class SensorConfig:
     """Reference to the registered sensor entity instance."""
 
 
-# Query command codes for sensors
-QUERY_INPUT: Final = "IP"
-QUERY_PICTURE_MODE: Final = "PMPM"
-QUERY_LOW_LATENCY: Final = "PMLL"
-QUERY_MASK: Final = "ISMA"
-QUERY_LAMP_POWER: Final = "PMLP"
-QUERY_LENS_APERTURE: Final = "PMDI"
-QUERY_LENS_MEMORY: Final = "INML"  # Note: Read-only, no query available in protocol
-
 SENSORS: Final[tuple[SensorConfig, ...]] = (
-    SensorConfig(identifier="input", name="Input Source", query_command=QUERY_INPUT),
-    SensorConfig(identifier="source", name="Signal Status", query_command=None),
+    SensorConfig(identifier="input", name="Input Source", query_command=command.Input),
     SensorConfig(
-        identifier="picture_mode", name="Picture Mode", query_command=QUERY_PICTURE_MODE
+        identifier="picture_mode",
+        name="Picture Mode",
+        query_command=command.PictureMode,
     ),
     SensorConfig(
-        identifier="low_latency", name="Low Latency", query_command=QUERY_LOW_LATENCY
+        identifier="low_latency",
+        name="Low Latency",
+        query_command=command.LowLatencyMode,
     ),
-    SensorConfig(identifier="mask", name="Screen Mask", query_command=QUERY_MASK),
+    SensorConfig(identifier="mask", name="Screen Mask", query_command=command.Mask),
     SensorConfig(
-        identifier="lamp_power", name="Lamp Power", query_command=QUERY_LAMP_POWER
+        identifier="lamp_power", name="Lamp Power", query_command=command.LightPower
     ),
     SensorConfig(
         identifier="lens_aperture",
         name="Lens Aperture",
-        query_command=QUERY_LENS_APERTURE,
+        query_command=command.IntelligentLensAperture,
     ),
     SensorConfig(
-        identifier="lens_memory", name="Lens Memory", query_command=QUERY_LENS_MEMORY
+        identifier="lens_memory",
+        name="Lens Memory",
+        query_command=None,  # Read-only, no direct query
     ),
 )
-
-LENS_MEMORY_1: Final = "INML0"
-LENS_MEMORY_2: Final = "INML1"
-LENS_MEMORY_3: Final = "INML2"
-LENS_MEMORY_4: Final = "INML3"
-LENS_MEMORY_5: Final = "INML4"
-LENS_MEMORY_6: Final = "INML5"
-LENS_MEMORY_7: Final = "INML6"
-LENS_MEMORY_8: Final = "INML7"
-LENS_MEMORY_9: Final = "INML8"
-LENS_MEMORY_10: Final = "INML9"
-PICTURE_MODE_FILM: Final = "PMPM00"
-PICTURE_MODE_CINEMA: Final = "PMPM01"
-PICTURE_MODE_NATURAL: Final = "PMPM03"
-PICTURE_MODE_HDR10: Final = "PMPM04"
-PICTURE_MODE_THX: Final = "PMPM06"
-PICTURE_MODE_USER1: Final = "PMPM0C"
-PICTURE_MODE_USER2: Final = "PMPM0D"
-PICTURE_MODE_USER3: Final = "PMPM0E"
-PICTURE_MODE_USER4: Final = "PMPM0F"
-PICTURE_MODE_USER5: Final = "PMPM10"
-PICTURE_MODE_USER6: Final = "PMPM11"
-PICTURE_MODE_HLG: Final = "PMPM14"
-PICTURE_MODE_FRAME_ADAPT_HDR: Final = "PMPM0B"
-PICTURE_MODE_HDR10P: Final = "PMPM15"
-PICTURE_MODE_PANA_PQ: Final = "PMPM16"
-LOW_LATENCY_ON: Final = "PMLL1"
-LOW_LATENCY_OFF: Final = "PMLL0"
-MASK_OFF: Final = "ISMA2"
-MASK_CUSTOM1: Final = "ISMA0"
-MASK_CUSTOM2: Final = "ISMA1"
-MASK_CUSTOM3: Final = "ISMA3"
-LAMP_LOW: Final = "PMLP0"
-LAMP_MID: Final = "PMLP2"
-LAMP_HIGH: Final = "PMLP1"
-LENS_APERTURE_OFF: Final = "PMDI0"
-LENS_APERTURE_AUTO1: Final = "PMDI1"
-LENS_APERTURE_AUTO2: Final = "PMDI2"
-LENS_ANIMORPHIC_OFF: Final = "INVS0"
-LENS_ANIMORPHIC_A: Final = "INVS1"
-LENS_ANIMORPHIC_B: Final = "INVS2"
-LENS_ANIMORPHIC_C: Final = "INVS3"
-LENS_ANIMORPHIC_D: Final = "INVS4"
 
 
 class SimpleCommands(StrEnum):
