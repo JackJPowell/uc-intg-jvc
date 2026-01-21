@@ -128,11 +128,15 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                 model = jvc.model
                 # Get capabilities to store in config
                 capabilities_dict = jvc.capabilities()
-                capabilities_list = list(capabilities_dict.keys()) if capabilities_dict else []
+                capabilities_list = (
+                    list(capabilities_dict.keys()) if capabilities_dict else []
+                )
             finally:
                 await jvc.disconnect()
             _LOG.debug("JVC Projector MAC: %s, Model: %s", mac, model)
-            _LOG.debug("JVC Projector Capabilities: %d commands", len(capabilities_list))
+            _LOG.debug(
+                "JVC Projector Capabilities: %d commands", len(capabilities_list)
+            )
 
             return JVCConfig(
                 identifier=mac if mac else model,

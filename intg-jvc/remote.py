@@ -235,43 +235,43 @@ class JVCRemote(Remote):
                         )
                     case SimpleCommands.LENS_MEMORY_1 | "LENS_MEMORY_1":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_1)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_1)
                         )
                     case SimpleCommands.LENS_MEMORY_2 | "LENS_MEMORY_2":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_2)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_2)
                         )
                     case SimpleCommands.LENS_MEMORY_3 | "LENS_MEMORY_3":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_3)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_3)
                         )
                     case SimpleCommands.LENS_MEMORY_4 | "LENS_MEMORY_4":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_4)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_4)
                         )
                     case SimpleCommands.LENS_MEMORY_5 | "LENS_MEMORY_5":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_5)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_5)
                         )
                     case SimpleCommands.LENS_MEMORY_6 | "LENS_MEMORY_6":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_6)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_6)
                         )
                     case SimpleCommands.LENS_MEMORY_7 | "LENS_MEMORY_7":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_7)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_7)
                         )
                     case SimpleCommands.LENS_MEMORY_8 | "LENS_MEMORY_8":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_8)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_8)
                         )
                     case SimpleCommands.LENS_MEMORY_9 | "LENS_MEMORY_9":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_9)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_9)
                         )
                     case SimpleCommands.LENS_MEMORY_10 | "LENS_MEMORY_10":
                         asyncio.create_task(
-                            jvc.send_command("operation", code=jvc_cmd.Remote.MODE_10)
+                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_10)
                         )
                     case SimpleCommands.PICTURE_MODE_FILM | "PICTURE_MODE_FILM":
                         res = await jvc.send_command(
