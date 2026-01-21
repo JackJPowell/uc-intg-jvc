@@ -19,6 +19,8 @@ class JVCConfig:
     """IP Address of device"""
     password: str = ""
     """Optional password for projector."""
+    capabilities: list[str] | None = None
+    """Cached list of supported projector capabilities (command names)."""
 
 
 @dataclass
@@ -41,33 +43,60 @@ class SensorConfig:
     """Reference to the registered sensor entity instance."""
 
 
-SENSORS: Final[tuple[SensorConfig, ...]] = (
-    SensorConfig(identifier="input", name="Input Source", query_command=command.Input),
-    SensorConfig(
+# Map of command class names to sensor configurations
+# Filtered at runtime based on what the connected projector actually supports
+SENSORS: Final[dict[str, SensorConfig]] = {
+    "Input": SensorConfig(
+        identifier="input",
+        name="Input Source",
+        query_command=command.Input,
+    ),
+    "Source": SensorConfig(
+        identifier="source",
+        name="Signal Source",
+        query_command=command.Source,
+    ),
+    "PictureMode": SensorConfig(
         identifier="picture_mode",
         name="Picture Mode",
         query_command=command.PictureMode,
     ),
-    SensorConfig(
+    "LowLatencyMode": SensorConfig(
         identifier="low_latency",
         name="Low Latency",
         query_command=command.LowLatencyMode,
     ),
-    SensorConfig(identifier="mask", name="Screen Mask", query_command=command.Mask),
-    SensorConfig(
-        identifier="lamp_power", name="Lamp Power", query_command=command.LightPower
+    "Mask": SensorConfig(
+        identifier="mask",
+        name="Screen Mask",
+        query_command=command.Mask,
     ),
-    SensorConfig(
+    "LightPower": SensorConfig(
+        identifier="lamp_power",
+        name="Lamp Power",
+        query_command=command.LightPower,
+    ),
+    "IntelligentLensAperture": SensorConfig(
         identifier="lens_aperture",
         name="Lens Aperture",
         query_command=command.IntelligentLensAperture,
     ),
-    SensorConfig(
+    "Anamorphic": SensorConfig(
+        identifier="anamorphic",
+        name="Anamorphic Mode",
+        query_command=command.Anamorphic,
+    ),
+    "ColorProfile": SensorConfig(
+        identifier="color_profile",
+        name="Color Profile",
+        query_command=command.ColorProfile,
+    ),
+    "LensMemory": SensorConfig(
         identifier="lens_memory",
         name="Lens Memory",
-        query_command=None,  # Read-only, no direct query
+        query_command=None,
     ),
-)
+}
 
 
 class SimpleCommands(StrEnum):

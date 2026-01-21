@@ -126,15 +126,20 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                 # info dict contains: {' ip', 'model', 'spec'}
                 mac = await jvc.get(command.MacAddress)
                 model = jvc.model
+                # Get capabilities to store in config
+                capabilities_dict = jvc.capabilities()
+                capabilities_list = list(capabilities_dict.keys()) if capabilities_dict else []
             finally:
                 await jvc.disconnect()
             _LOG.debug("JVC Projector MAC: %s, Model: %s", mac, model)
+            _LOG.debug("JVC Projector Capabilities: %d commands", len(capabilities_list))
 
             return JVCConfig(
                 identifier=mac if mac else model,
                 name=name,
                 address=address,
                 password=password,
+                capabilities=capabilities_list,
             )
 
         except JvcProjectorError as ex:

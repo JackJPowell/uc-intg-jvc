@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 
-from const import SENSORS, JVCConfig
+from const import JVCConfig
 from discover import JVCProjectorDiscovery
 from media_player import JVCMediaPlayer
 from projector import JVCProjector
@@ -39,7 +39,8 @@ async def main():
             JVCMediaPlayer,
             JVCRemote,
             lambda cfg, dev: [
-                JVCSensor(cfg, dev, sensor_config) for sensor_config in SENSORS
+                JVCSensor(cfg, dev, sensor_config)
+                for sensor_config in dev.sensors.values()
             ],
         ],
     )

@@ -47,8 +47,30 @@ class JVCProjector(StatelessHTTPDevice):
         self._source_list: list[str] = ["HDMI1", "HDMI2"]
         self._active_source: str = ""
         self._signal: str = ""
+        self._capabilities: dict[str, Any] = {}
+        self._projector_info: dict[str, Any] = {}
+        self._capabilities_retrieved = False
 
-        self.sensors: dict[str, SensorConfig] = {s.identifier: s for s in SENSORS}
+        # Initialize empty sensors dict first
+        self.sensors: dict[str, SensorConfig] = {}
+
+        # Load capabilities from config if available and build sensors immediately
+        if device_config.capabilities:
+            # Convert list to dict format (same as jp.capabilities() returns)
+            self._capabilities = {cmd: None for cmd in device_config.capabilities}
+            self._capabilities_retrieved = True
+            _LOG.info(
+                "[%s] Loaded %d capabilities from config",
+                device_config.name,
+                len(self._capabilities),
+            )
+            # Build sensors immediately from cached capabilities
+            self._build_sensors_from_capabilities()
+            _LOG.info(
+                "[%s] Built %d sensors from cached capabilities",
+                device_config.name,
+                len(self.sensors),
+            )
 
         self.attributes = MediaPlayerAttributes(
             STATE=None,
@@ -95,6 +117,77 @@ class JVCProjector(StatelessHTTPDevice):
             else self._device_config.identifier
         )
 
+    async def discover_capabilities(self) -> None:
+        """Discover projector capabilities and build dynamic sensor list.
+
+        This must be called after connection is established.
+        """
+        try:
+            async with self._projector_lock:
+                # Get capabilities and projector info
+                self._capabilities = self._jvc_projector.capabilities()
+                # Try to get projector info if available
+                try:
+                    if hasattr(self._jvc_projector, "info"):
+                        self._projector_info = self._jvc_projector.info()  # type: ignore[misc]
+                    else:
+                        self._projector_info = {
+                            "ip": self._jvc_projector.host,
+                            "model": getattr(self._jvc_projector, "model", "Unknown"),
+                        }
+                except AttributeError:
+                    self._projector_info = {"ip": self._jvc_projector.host}
+
+            _LOG.info(
+                "[%s] Discovered projector: %s",
+                self.name,
+                self._projector_info,
+            )
+            _LOG.debug(
+                "[%s] Projector supports %d commands",
+                self.name,
+                len(self._capabilities),
+            )
+
+            # Build sensor list from supported queryable commands
+            self._build_dynamic_sensors()
+
+        except JvcProjectorError as err:
+            _LOG.error(
+                "[%s] Error discovering capabilities: %s",
+                self.name,
+                err,
+            )
+
+    def _build_dynamic_sensors(self) -> None:
+        """Build sensor configurations from discovered capabilities."""
+        self._build_sensors_from_capabilities()
+        _LOG.info(
+            "[%s] Total sensors configured: %d",
+            self.name,
+            len(self.sensors),
+        )
+
+    def _build_sensors_from_capabilities(self) -> None:
+        """Filter SENSORS dict based on projector capabilities."""
+        new_sensors = {}
+
+        # Add sensors for discovered capabilities
+        for cmd_name in self._capabilities:
+            if cmd_name in SENSORS:
+                sensor_config = SENSORS[cmd_name]
+                sensor_id = sensor_config.identifier
+                # SENSORS already has the correct query_command, just use it directly
+                _LOG.debug(
+                    "[%s] Adding sensor: %s (command: %s)",
+                    self.name,
+                    sensor_id,
+                    cmd_name,
+                )
+                new_sensors[sensor_id] = sensor_config
+
+        self.sensors = new_sensors
+
     def register_sensor_entity(self, sensor_id: str, entity: Any) -> None:
         """Register a sensor entity with this device.
 
@@ -125,21 +218,23 @@ class JVCProjector(StatelessHTTPDevice):
 
             # Acquire lock to serialize access to projector
             async with self._projector_lock:
-                # Query additional sensor values using get() with 100ms delays
-                for sensor_id in [
-                    "picture_mode",
-                    "low_latency",
-                    "mask",
-                    "lamp_power",
-                    "lens_aperture",
-                ]:
-                    sensor = self.sensors.get(sensor_id)
-                    if sensor and sensor.query_command:
-                        # Use new get() API with command classes
-                        sensor.value = await self._jvc_projector.get(
-                            sensor.query_command
-                        )
-                        await asyncio.sleep(0.1)
+                # Query all sensors that have query commands
+                # Note: sensors are only created for supported commands, so no need to check supports_command
+                for sensor_id, sensor in self.sensors.items():
+                    if sensor.query_command:
+                        try:
+                            # Use new get() API with command classes
+                            sensor.value = await self._jvc_projector.get(
+                                sensor.query_command
+                            )
+                            await asyncio.sleep(0.25)
+                        except JvcProjectorError as err:
+                            _LOG.warning(
+                                "[%s] Error querying sensor '%s': %s",
+                                self.name,
+                                sensor_id,
+                                err,
+                            )
 
             # Call refresh_state on registered sensor entities (outside lock)
             for sensor_config in self.sensors.values():
@@ -244,6 +339,22 @@ class JVCProjector(StatelessHTTPDevice):
             async with self._projector_lock:
                 await self._jvc_projector.connect()
 
+            # Discover and store capabilities if not already loaded from config (upgrade case)
+            if not self._capabilities_retrieved:
+                await self.discover_capabilities()
+                # Store capabilities in config for future use
+                if self._capabilities and self._config_manager:
+                    capabilities_list = list(self._capabilities.keys())
+                    self._device_config.capabilities = capabilities_list
+                    await self._config_manager.update_config(self._device_config)
+                    _LOG.info(
+                        "[%s] Stored %d capabilities in config",
+                        self.name,
+                        len(capabilities_list),
+                    )
+
+            # Acquire lock again for state queries
+            async with self._projector_lock:
                 # Get power state
                 power_str = await self._jvc_projector.get(jvc_cmd.Power)
                 self._state = self._convert_power_state(str(power_str))
@@ -327,7 +438,6 @@ class JVCProjector(StatelessHTTPDevice):
                             )
                         self._state = media_player.States.ON
                         self.attributes.STATE = media_player.States.ON
-
                     case "powerOff":
                         power = await self._jvc_projector.get(jvc_cmd.Power)
                         # Normalize power state from API
@@ -338,7 +448,6 @@ class JVCProjector(StatelessHTTPDevice):
                             )
                         self._state = media_player.States.STANDBY
                         self.attributes.STATE = media_player.States.STANDBY
-
                     case "powerToggle":
                         power = await self._jvc_projector.get(jvc_cmd.Power)
                         # Normalize power state from API
@@ -375,6 +484,13 @@ class JVCProjector(StatelessHTTPDevice):
                     case "remote":
                         code = kwargs.get("code")
                         if code:
+                            if not self._jvc_projector.supports(code):
+                                _LOG.warning(
+                                    "[%s] Remote command %s not supported",
+                                    self.name,
+                                    code,
+                                )
+                                return
                             # Code is already a command.Remote value, pass directly
                             await self._jvc_projector.remote(code)
                         # Remote commands don't update attributes
@@ -382,9 +498,17 @@ class JVCProjector(StatelessHTTPDevice):
                     case "operation":
                         code = kwargs.get("code")
                         if code:
+                            if not self._jvc_projector.supports(code):
+                                _LOG.warning(
+                                    "[%s] Operation command %s not supported",
+                                    self.name,
+                                    code,
+                                )
+                                return
                             # Operation commands use set() with appropriate command class
-                            # Code should be command.CommandName.VALUE format
-                            await self._jvc_projector.set(code, code)
+                            # Extract the enum class from the value for set()
+                            cmd_class = type(code)
+                            await self._jvc_projector.set(cmd_class, code)
                         # Operation commands don't update attributes
 
                     case _:
