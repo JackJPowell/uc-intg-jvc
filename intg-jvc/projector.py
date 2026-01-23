@@ -281,11 +281,12 @@ class JVCProjector(StatelessHTTPDevice):
                     case "remote":
                         code = kwargs.get("code")
                         if code:
-                            if not self._jvc_projector.supports(code):
+                            # For Remote commands, just check if Remote class is supported
+                            # Individual remote values don't need separate support checks
+                            if not self._jvc_projector.supports(jvc_cmd.Remote):
                                 _LOG.warning(
-                                    "[%s] Remote command %s not supported",
+                                    "[%s] Remote commands not supported",
                                     self.name,
-                                    code,
                                 )
                                 return
                             await self._jvc_projector.remote(code)
@@ -293,16 +294,18 @@ class JVCProjector(StatelessHTTPDevice):
                     case "operation":
                         code = kwargs.get("code")
                         if code:
-                            if not self._jvc_projector.supports(code):
-                                _LOG.warning(
-                                    "[%s] Operation command %s not supported",
-                                    self.name,
-                                    code,
-                                )
-                                return
                             # Operation commands use set() with appropriate command class
                             # Extract the enum class from the value for set()
                             cmd_class = type(code)
+
+                            if not self._jvc_projector.supports(cmd_class):
+                                _LOG.warning(
+                                    "[%s] Operation command %s not supported",
+                                    self.name,
+                                    cmd_class.__name__,
+                                )
+                                return
+
                             await self._jvc_projector.set(cmd_class, code)
 
                             # Find and update the corresponding sensor value
