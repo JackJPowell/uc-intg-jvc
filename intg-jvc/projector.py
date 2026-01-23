@@ -15,13 +15,17 @@ from const import (
     SENSORS,
     SensorConfig,
 )
-from sensor import JVCSensor
 from jvcprojector import JvcProjector as JvcLib
 from jvcprojector import command as jvc_cmd
 from jvcprojector.error import JvcProjectorError
 from ucapi import media_player, EntityTypes
 from ucapi.sensor import States as SensorStates
-from ucapi_framework import BaseConfigManager, StatelessHTTPDevice, EntitySource
+from ucapi_framework import (
+    BaseConfigManager,
+    StatelessHTTPDevice,
+    EntitySource,
+    BaseIntegrationDriver,
+)
 from ucapi_framework.helpers import MediaPlayerAttributes, SensorAttributes
 
 _LOG = logging.getLogger(__name__)
@@ -35,7 +39,7 @@ class JVCProjector(StatelessHTTPDevice):
         device_config: JVCConfig,
         loop: AbstractEventLoop | None,
         config_manager: BaseConfigManager | None = None,
-        driver: Any = None,
+        driver: BaseIntegrationDriver | None = None,
     ) -> None:
         """Create instance with stateless device base."""
         self._device_config: JVCConfig
@@ -136,7 +140,16 @@ class JVCProjector(StatelessHTTPDevice):
             if not self._capabilities_retrieved:
                 await self.discover_capabilities()
                 self._store_capabilities_in_config()
-                self._register_sensor_entities()
+                if self.driver:
+                    # Import here to avoid circular dependency
+                    from sensor import JVCSensor
+
+                    # Create sensor entities and register them
+                    sensor_entities = [
+                        JVCSensor(self.device_config, self, sensor_config)
+                        for sensor_config in self.sensors.values()
+                    ]
+                    self.driver.add_entities(sensor_entities)
 
             # Acquire lock again for state queries
             async with self._projector_lock:
@@ -403,58 +416,40 @@ class JVCProjector(StatelessHTTPDevice):
             len(capabilities_list),
         )
 
-    def _register_sensor_entities(self) -> None:
-        """Register sensor entities for newly discovered sensors."""
-        if not self.driver or not self.sensors:
-            return
-
-        _LOG.info(
-            "[%s] Registering %d sensor entities",
-            self.name,
-            len(self.sensors),
-        )
-        for sensor_config in self.sensors.values():
-            sensor_entity = JVCSensor(self._device_config, self, sensor_config)
-            self.driver.add_entity(sensor_entity)
-            _LOG.debug(
-                "[%s] Registered sensor entity: %s",
-                self.name,
-                sensor_config.identifier,
-            )
-
     async def _update_all_sensors(self) -> None:
         """Update all sensor values with delays between queries."""
         try:
-            # Only update sensors if projector is on
-            if self.state != media_player.States.ON:
+            # Only query sensor values if projector is on
+            if self.state == media_player.States.ON:
+                # Acquire lock to serialize access to projector
+                async with self._projector_lock:
+                    # Query all sensors that have query commands
+                    # Note: sensors are only created for supported commands, so no need to check supports_command
+                    for sensor_id, sensor in self.sensors.items():
+                        if sensor.query_command:
+                            try:
+                                # Use new get() API with command classes
+                                sensor.value = await self._jvc_projector.get(
+                                    sensor.query_command
+                                )
+                                await asyncio.sleep(0.25)
+                            except JvcProjectorError as err:
+                                _LOG.warning(
+                                    "[%s] Error querying sensor '%s': %s",
+                                    self.name,
+                                    sensor_id,
+                                    err,
+                                )
+                _LOG.debug("[%s] All sensor values updated", self.name)
+            else:
                 _LOG.debug(
-                    "[%s] Skipping sensor update - projector state is %s",
+                    "[%s] Skipping sensor value queries - projector state is %s",
                     self.name,
                     self.state,
                 )
-                return
 
-            # Acquire lock to serialize access to projector
-            async with self._projector_lock:
-                # Query all sensors that have query commands
-                # Note: sensors are only created for supported commands, so no need to check supports_command
-                for sensor_id, sensor in self.sensors.items():
-                    if sensor.query_command:
-                        try:
-                            # Use new get() API with command classes
-                            sensor.value = await self._jvc_projector.get(
-                                sensor.query_command
-                            )
-                            await asyncio.sleep(0.25)
-                        except JvcProjectorError as err:
-                            _LOG.warning(
-                                "[%s] Error querying sensor '%s': %s",
-                                self.name,
-                                sensor_id,
-                                err,
-                            )
-
-            # Call refresh_state on sensor entities (outside lock)
+            # Always refresh sensor entity states (even when projector is off)
+            # This updates sensor state to UNAVAILABLE when projector is off
             if self.driver:
                 sensor_entities = self.driver.filter_entities_by_type(
                     EntityTypes.SENSOR, EntitySource.CONFIGURED
@@ -462,7 +457,6 @@ class JVCProjector(StatelessHTTPDevice):
                 for entity in sensor_entities:
                     entity.refresh_state()
 
-            _LOG.debug("[%s] All sensors updated successfully", self.name)
         except JvcProjectorError as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
         finally:
@@ -486,12 +480,22 @@ class JVCProjector(StatelessHTTPDevice):
                 )
                 return
 
-            # Acquire lock to serialize access to projector
-            async with self._projector_lock:
-                # Query the specific sensor value and store in sensor config
-                sensor.value = await self._jvc_projector.get(sensor.query_command)
+            # Only query value if projector is ON
+            if self.state == media_player.States.ON:
+                # Acquire lock to serialize access to projector
+                async with self._projector_lock:
+                    # Query the specific sensor value and store in sensor config
+                    sensor.value = await self._jvc_projector.get(sensor.query_command)
+                _LOG.debug("[%s] Sensor '%s' value updated", self.name, sensor_key)
+            else:
+                _LOG.debug(
+                    "[%s] Skipping sensor '%s' value query - projector state is %s",
+                    self.name,
+                    sensor_key,
+                    self.state,
+                )
 
-            # Trigger sensor entity update if it exists (outside lock)
+            # Always trigger sensor entity state refresh (even when projector is off)
             if self.driver:
                 # Find the specific sensor entity by matching the sensor_id in the entity_id
                 sensor_entities = self.driver.filter_entities_by_type(
@@ -503,7 +507,6 @@ class JVCProjector(StatelessHTTPDevice):
                         entity.refresh_state()
                         break
 
-            _LOG.debug("[%s] Sensor '%s' updated", self.name, sensor_key)
         except JvcProjectorError as err:  # noqa: BLE001
             _LOG.error(
                 "[%s] Error updating sensor '%s': %s", self.name, sensor_key, err
