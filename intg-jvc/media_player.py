@@ -83,7 +83,7 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
 
             match cmd_id:
                 case media_player.Commands.ON:
-                    _LOG.debug("Sending ON command to AVR")
+                    _LOG.debug("Sending ON command to Projector")
                     res = await jvc.send_command("powerOn")
                     state_changed = True
                 case media_player.Commands.OFF:
@@ -171,162 +171,248 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
                     )
                 case SimpleCommands.LENS_MEMORY_1:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_1
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_1,
                     )
                 case SimpleCommands.LENS_MEMORY_2:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_2
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_2,
                     )
                 case SimpleCommands.LENS_MEMORY_3:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_3
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_3,
                     )
                 case SimpleCommands.LENS_MEMORY_4:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_4
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_4,
                     )
                 case SimpleCommands.LENS_MEMORY_5:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_5
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_5,
                     )
                 case SimpleCommands.LENS_MEMORY_6:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_6
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_6,
                     )
                 case SimpleCommands.LENS_MEMORY_7:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_7
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_7,
                     )
                 case SimpleCommands.LENS_MEMORY_8:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_8
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_8,
                     )
                 case SimpleCommands.LENS_MEMORY_9:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_9
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_9,
                     )
                 case SimpleCommands.LENS_MEMORY_10:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.InstallationMode.MEMORY_10
+                        "operation",
+                        cmd_class=jvc_cmd.InstallationMode,
+                        value=jvc_cmd.InstallationMode.MEMORY_10,
                     )
                 case SimpleCommands.PICTURE_MODE_FILM:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.FILM
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.FILM,
                     )
                 case SimpleCommands.PICTURE_MODE_CINEMA:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.CINEMA
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.CINEMA,
                     )
                 case SimpleCommands.PICTURE_MODE_NATURAL:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.NATURAL
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.NATURAL,
                     )
                 case SimpleCommands.PICTURE_MODE_HDR10:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.HDR10
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.HDR10,
                     )
                 case SimpleCommands.PICTURE_MODE_THX:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.THX
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.THX,
                     )
                 case SimpleCommands.PICTURE_MODE_USER1:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_1
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_1,
                     )
                 case SimpleCommands.PICTURE_MODE_USER2:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_2
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_2,
                     )
                 case SimpleCommands.PICTURE_MODE_USER3:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_3
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_3,
                     )
                 case SimpleCommands.PICTURE_MODE_USER4:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_4
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_4,
                     )
                 case SimpleCommands.PICTURE_MODE_USER5:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_5
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_5,
                     )
                 case SimpleCommands.PICTURE_MODE_USER6:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.USER_6
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.USER_6,
                     )
                 case SimpleCommands.PICTURE_MODE_HLG:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.HLG
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.HLG,
                     )
                 case SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.FRAME_ADAPT_HDR
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.FRAME_ADAPT_HDR,
                     )
                 case SimpleCommands.PICTURE_MODE_HDR10P:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.HDR10_PLUS
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.HDR10_PLUS,
                     )
                 case SimpleCommands.PICTURE_MODE_PANA_PQ:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.PictureMode.PANA_PQ
+                        "operation",
+                        cmd_class=jvc_cmd.PictureMode,
+                        value=jvc_cmd.PictureMode.PANA_PQ,
                     )
                 case SimpleCommands.LOW_LATENCY_ON:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.LowLatencyMode.ON
+                        "operation",
+                        cmd_class=jvc_cmd.LowLatencyMode,
+                        value=jvc_cmd.LowLatencyMode.ON,
                     )
                 case SimpleCommands.LOW_LATENCY_OFF:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.LowLatencyMode.OFF
+                        "operation",
+                        cmd_class=jvc_cmd.LowLatencyMode,
+                        value=jvc_cmd.LowLatencyMode.OFF,
                     )
                 case SimpleCommands.MASK_OFF:
-                    res = await jvc.send_command("operation", code=jvc_cmd.Mask.OFF)
+                    res = await jvc.send_command(
+                        "operation", cmd_class=jvc_cmd.Mask, value=jvc_cmd.Mask.OFF
+                    )
                 case SimpleCommands.MASK_CUSTOM1:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.Mask.CUSTOM_1
+                        "operation", cmd_class=jvc_cmd.Mask, value=jvc_cmd.Mask.CUSTOM_1
                     )
                 case SimpleCommands.MASK_CUSTOM2:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.Mask.CUSTOM_2
+                        "operation", cmd_class=jvc_cmd.Mask, value=jvc_cmd.Mask.CUSTOM_2
                     )
                 case SimpleCommands.MASK_CUSTOM3:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.Mask.CUSTOM_3
+                        "operation", cmd_class=jvc_cmd.Mask, value=jvc_cmd.Mask.CUSTOM_3
                     )
                 case SimpleCommands.LAMP_LOW:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.LightPower.LOW
+                        "operation",
+                        cmd_class=jvc_cmd.LightPower,
+                        value=jvc_cmd.LightPower.LOW,
                     )
                 case SimpleCommands.LAMP_MID:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.LightPower.MID
+                        "operation",
+                        cmd_class=jvc_cmd.LightPower,
+                        value=jvc_cmd.LightPower.MID,
                     )
                 case SimpleCommands.LAMP_HIGH:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.LightPower.HIGH
+                        "operation",
+                        cmd_class=jvc_cmd.LightPower,
+                        value=jvc_cmd.LightPower.HIGH,
                     )
                 case SimpleCommands.LENS_APERTURE_OFF:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.IntelligentLensAperture.OFF
+                        "operation",
+                        cmd_class=jvc_cmd.IntelligentLensAperture,
+                        value=jvc_cmd.IntelligentLensAperture.OFF,
                     )
                 case SimpleCommands.LENS_APERTURE_AUTO1:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.IntelligentLensAperture.AUTO_1
+                        "operation",
+                        cmd_class=jvc_cmd.IntelligentLensAperture,
+                        value=jvc_cmd.IntelligentLensAperture.AUTO_1,
                     )
                 case SimpleCommands.LENS_APERTURE_AUTO2:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.IntelligentLensAperture.AUTO_2
+                        "operation",
+                        cmd_class=jvc_cmd.IntelligentLensAperture,
+                        value=jvc_cmd.IntelligentLensAperture.AUTO_2,
                     )
                 case SimpleCommands.LENS_ANIMORPHIC_OFF:
                     res = await jvc.send_command(
-                        "operation", code=jvc_cmd.Anamorphic.OFF
+                        "operation",
+                        cmd_class=jvc_cmd.Anamorphic,
+                        value=jvc_cmd.Anamorphic.OFF,
                     )
                 case SimpleCommands.LENS_ANIMORPHIC_A:
-                    res = await jvc.send_command("operation", code=jvc_cmd.Anamorphic.A)
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.Anamorphic,
+                        value=jvc_cmd.Anamorphic.A,
+                    )
                 case SimpleCommands.LENS_ANIMORPHIC_B:
-                    res = await jvc.send_command("operation", code=jvc_cmd.Anamorphic.B)
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.Anamorphic,
+                        value=jvc_cmd.Anamorphic.B,
+                    )
                 case SimpleCommands.LENS_ANIMORPHIC_C:
-                    res = await jvc.send_command("operation", code=jvc_cmd.Anamorphic.C)
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.Anamorphic,
+                        value=jvc_cmd.Anamorphic.C,
+                    )
                 case SimpleCommands.LENS_ANIMORPHIC_D:
-                    res = await jvc.send_command("operation", code=jvc_cmd.Anamorphic.D)
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.Anamorphic,
+                        value=jvc_cmd.Anamorphic.D,
+                    )
 
         except Exception as ex:  # pylint: disable=broad-except
             _LOG.error("Error executing command %s: %s", cmd_id, ex)

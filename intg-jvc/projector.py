@@ -34,6 +34,8 @@ _LOG = logging.getLogger(__name__)
 class JVCProjector(StatelessHTTPDevice):
     """Representing a JVC Projector Device."""
 
+    driver: BaseIntegrationDriver | None
+
     def __init__(
         self,
         device_config: JVCConfig,
@@ -50,7 +52,7 @@ class JVCProjector(StatelessHTTPDevice):
             driver=driver,
         )
         self._jvc_projector = JvcLib(
-            host=device_config.address, password=device_config.password
+            host=device_config.address, password=device_config.password, timeout=5.0
         )
         self._projector_lock = asyncio.Lock()
         self._sensor_update_task: asyncio.Task | None = None
@@ -143,7 +145,10 @@ class JVCProjector(StatelessHTTPDevice):
 
             # Discover and store capabilities if not already loaded from config (upgrade case)
             # Only attempt discovery if projector is ON
-            if not self._capabilities_retrieved and self._state == media_player.States.ON:
+            if (
+                not self._capabilities_retrieved
+                and self._state == media_player.States.ON
+            ):
                 await self.discover_capabilities()
                 self._store_capabilities_in_config()
                 # Only create sensor entities if use_sensors is enabled
@@ -152,15 +157,14 @@ class JVCProjector(StatelessHTTPDevice):
                     from sensor import JVCSensor
 
                     # Create sensor entities and register them
-                    sensor_entities = [
+                    sensor_entities: list[JVCSensor] = [
                         JVCSensor(self.device_config, self, sensor_config)
                         for sensor_config in self.sensors.values()
                     ]
-                    self.driver.add_entities(sensor_entities)
+                    self.driver.add_entities(sensor_entities)  # ty:ignore[invalid-argument-type]
 
             # Acquire lock again for input queries
             async with self._projector_lock:
-
                 # Get input if projector is on
                 if self._state == media_player.States.ON:
                     input_value = await self._jvc_projector.get(jvc_cmd.Input)
@@ -250,6 +254,7 @@ class JVCProjector(StatelessHTTPDevice):
                             )
                         self._state = media_player.States.STANDBY
                         self.attributes.STATE = media_player.States.STANDBY
+                        await self._update_all_sensors()
                     case "powerToggle":
                         power = await self._jvc_projector.get(jvc_cmd.Power)
                         # Normalize power state from API
@@ -260,6 +265,7 @@ class JVCProjector(StatelessHTTPDevice):
                             )
                             self._state = media_player.States.STANDBY
                             self.attributes.STATE = media_player.States.STANDBY
+                            await self._update_all_sensors()
                         elif power_state in [
                             media_player.States.STANDBY,
                             media_player.States.OFF,
@@ -297,12 +303,10 @@ class JVCProjector(StatelessHTTPDevice):
                             await self._jvc_projector.remote(code)
 
                     case "operation":
-                        code = kwargs.get("code")
-                        if code:
-                            # Operation commands use set() with appropriate command class
-                            # Extract the enum class from the value for set()
-                            cmd_class = type(code)
-
+                        cmd_class = kwargs.get("cmd_class")
+                        value = kwargs.get("value")
+                        if cmd_class and value is not None:
+                            # Operation commands use set() with command class and value
                             if not self._jvc_projector.supports(cmd_class):
                                 _LOG.warning(
                                     "[%s] Operation command %s not supported",
@@ -311,14 +315,14 @@ class JVCProjector(StatelessHTTPDevice):
                                 )
                                 return
 
-                            await self._jvc_projector.set(cmd_class, code)
+                            await self._jvc_projector.set(cmd_class, value)
 
                             # Find and update the corresponding sensor value if sensors are enabled
                             if self._device_config.use_sensors:
                                 for sensor_id, sensor_config in self.sensors.items():
                                     if sensor_config.query_command == cmd_class:
                                         # Update sensor with the assigned value (no network call needed)
-                                        await self.update_sensor(sensor_id, value=code)
+                                        await self.update_sensor(sensor_id, value=value)
                                         break
 
                     case _:
@@ -458,7 +462,7 @@ class JVCProjector(StatelessHTTPDevice):
                     EntityTypes.SENSOR, EntitySource.CONFIGURED
                 )
                 for entity in sensor_entities:
-                    entity.refresh_state()
+                    entity.refresh_state()  # ty:ignore[unresolved-attribute]
 
         except JvcProjectorError as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
@@ -522,7 +526,7 @@ class JVCProjector(StatelessHTTPDevice):
                 for entity in sensor_entities:
                     # Entity ID format: sensor.{device_id}.{sensor_id}
                     if entity.id.endswith(f".{sensor_key}"):
-                        entity.refresh_state()
+                        entity.refresh_state()  # ty:ignore[unresolved-attribute]
                         break
 
         except JvcProjectorError as err:  # noqa: BLE001
@@ -553,11 +557,11 @@ class JVCProjector(StatelessHTTPDevice):
             value = raw_value
 
         # Return SensorAttributes dataclass
-        sensor_state = SensorStates.UNAVAILABLE
+        sensor_state = SensorStates.UNKNOWN
         if self.state == media_player.States.ON:
             sensor_state = SensorStates.ON
         elif self.state == media_player.States.STANDBY:
-            sensor_state = SensorStates.UNAVAILABLE
+            sensor_state = SensorStates.UNKNOWN
 
         # Return value if projector is ON, otherwise use default
         # Use 'is not None' check to allow empty strings as valid values
