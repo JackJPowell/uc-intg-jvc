@@ -156,13 +156,10 @@ class JVCRemote(Remote):
                                 "setInput",
                                 source=params.get("source"),
                             )
-                            asyncio.create_task(self._device.update_sensor("input"))
                     case "INPUT_HDMI_1":  # Special case for JVC HDMI 1 input
                         await jvc.send_command("setInput", source="HDMI1")
-                        asyncio.create_task(self._device.update_sensor("input"))
                     case "INPUT_HDMI_2":  # Special case for JVC HDMI 2 input
                         await jvc.send_command("setInput", source="HDMI2")
-                        asyncio.create_task(self._device.update_sensor("input"))
                     case SimpleCommands.REMOTE_ADVANCED_MENU | "REMOTE_ADVANCED_MENU":
                         res = await jvc.send_command(
                             "remote", code=jvc_cmd.Remote.ADVANCED_MENU
@@ -225,114 +222,94 @@ class JVCRemote(Remote):
                         res = await jvc.send_command(
                             "remote", code=jvc_cmd.Remote.PICTURE_ADJUST
                         )
-                    case SimpleCommands.REMOTE_NATURAL | "REMOTE_NATURAL":
-                        res = await jvc.send_command(
-                            "remote", code=jvc_cmd.Remote.NATURAL
-                        )
-                    case SimpleCommands.REMOTE_CINEMA | "REMOTE_CINEMA":
-                        res = await jvc.send_command(
-                            "remote", code=jvc_cmd.Remote.CINEMA
-                        )
                     case SimpleCommands.LENS_MEMORY_1 | "LENS_MEMORY_1":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_1)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_1
                         )
                     case SimpleCommands.LENS_MEMORY_2 | "LENS_MEMORY_2":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_2)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_2
                         )
                     case SimpleCommands.LENS_MEMORY_3 | "LENS_MEMORY_3":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_3)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_3
                         )
                     case SimpleCommands.LENS_MEMORY_4 | "LENS_MEMORY_4":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_4)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_4
                         )
                     case SimpleCommands.LENS_MEMORY_5 | "LENS_MEMORY_5":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_5)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_5
                         )
                     case SimpleCommands.LENS_MEMORY_6 | "LENS_MEMORY_6":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_6)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_6
                         )
                     case SimpleCommands.LENS_MEMORY_7 | "LENS_MEMORY_7":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_7)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_7
                         )
                     case SimpleCommands.LENS_MEMORY_8 | "LENS_MEMORY_8":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_8)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_8
                         )
                     case SimpleCommands.LENS_MEMORY_9 | "LENS_MEMORY_9":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_9)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_9
                         )
                     case SimpleCommands.LENS_MEMORY_10 | "LENS_MEMORY_10":
-                        asyncio.create_task(
-                            jvc.send_command("remote", code=jvc_cmd.Remote.MODE_10)
+                        res = await jvc.send_command(
+                            "operation", code=jvc_cmd.InstallationMode.MEMORY_10
                         )
                     case SimpleCommands.PICTURE_MODE_FILM | "PICTURE_MODE_FILM":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.FILM
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_CINEMA | "PICTURE_MODE_CINEMA":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.CINEMA
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_NATURAL | "PICTURE_MODE_NATURAL":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.NATURAL
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_HDR10 | "PICTURE_MODE_HDR10":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.HDR10
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_THX | "PICTURE_MODE_THX":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.THX
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER1 | "PICTURE_MODE_USER1":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_1
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER2 | "PICTURE_MODE_USER2":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_2
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER3 | "PICTURE_MODE_USER3":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_3
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER4 | "PICTURE_MODE_USER4":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_4
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER5 | "PICTURE_MODE_USER5":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_5
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_USER6 | "PICTURE_MODE_USER6":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.USER_6
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_HLG | "PICTURE_MODE_HLG":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.HLG
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case (
                         SimpleCommands.PICTURE_MODE_FRAME_ADAPT_HDR
                         | "PICTURE_MODE_FRAME_ADAPT_HDR"
@@ -340,100 +317,80 @@ class JVCRemote(Remote):
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.FRAME_ADAPT_HDR
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_HDR10P | "PICTURE_MODE_HDR10P":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.HDR10_PLUS
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.PICTURE_MODE_PANA_PQ | "PICTURE_MODE_PANA_PQ":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.PictureMode.PANA_PQ
                         )
-                        asyncio.create_task(self._device.update_sensor("picture_mode"))
                     case SimpleCommands.LOW_LATENCY_ON | "LOW_LATENCY_ON":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.LowLatencyMode.ON
                         )
-                        asyncio.create_task(self._device.update_sensor("low_latency"))
                     case SimpleCommands.LOW_LATENCY_OFF | "LOW_LATENCY_OFF":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.LowLatencyMode.OFF
                         )
-                        asyncio.create_task(self._device.update_sensor("low_latency"))
                     case SimpleCommands.MASK_OFF | "MASK_OFF":
                         res = await jvc.send_command("operation", code=jvc_cmd.Mask.OFF)
-                        asyncio.create_task(self._device.update_sensor("mask"))
                     case SimpleCommands.MASK_CUSTOM1 | "MASK_CUSTOM1":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Mask.CUSTOM_1
                         )
-                        asyncio.create_task(self._device.update_sensor("mask"))
                     case SimpleCommands.MASK_CUSTOM2 | "MASK_CUSTOM2":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Mask.CUSTOM_2
                         )
-                        asyncio.create_task(self._device.update_sensor("mask"))
                     case SimpleCommands.MASK_CUSTOM3 | "MASK_CUSTOM3":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Mask.CUSTOM_3
                         )
-                        asyncio.create_task(self._device.update_sensor("mask"))
                     case SimpleCommands.LAMP_LOW | "LAMP_LOW":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.LightPower.LOW
                         )
-                        asyncio.create_task(self._device.update_sensor("lamp_power"))
                     case SimpleCommands.LAMP_MID | "LAMP_MID":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.LightPower.MID
                         )
-                        asyncio.create_task(self._device.update_sensor("lamp_power"))
                     case SimpleCommands.LAMP_HIGH | "LAMP_HIGH":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.LightPower.HIGH
                         )
-                        asyncio.create_task(self._device.update_sensor("lamp_power"))
                     case SimpleCommands.LENS_APERTURE_OFF | "LENS_APERTURE_OFF":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.IntelligentLensAperture.OFF
                         )
-                        asyncio.create_task(self._device.update_sensor("lens_aperture"))
                     case SimpleCommands.LENS_APERTURE_AUTO1 | "LENS_APERTURE_AUTO1":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.IntelligentLensAperture.AUTO_1
                         )
-                        asyncio.create_task(self._device.update_sensor("lens_aperture"))
                     case SimpleCommands.LENS_APERTURE_AUTO2 | "LENS_APERTURE_AUTO2":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.IntelligentLensAperture.AUTO_2
                         )
-                        asyncio.create_task(self._device.update_sensor("lens_aperture"))
                     case SimpleCommands.LENS_ANIMORPHIC_OFF | "LENS_ANIMORPHIC_OFF":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Anamorphic.OFF
                         )
-                        asyncio.create_task(self._device.update_sensor("anamorphic"))
                     case SimpleCommands.LENS_ANIMORPHIC_A | "LENS_ANIMORPHIC_A":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Anamorphic.A
                         )
-                        asyncio.create_task(self._device.update_sensor("anamorphic"))
                     case SimpleCommands.LENS_ANIMORPHIC_B | "LENS_ANIMORPHIC_B":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Anamorphic.B
                         )
-                        asyncio.create_task(self._device.update_sensor("anamorphic"))
                     case SimpleCommands.LENS_ANIMORPHIC_C | "LENS_ANIMORPHIC_C":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Anamorphic.C
                         )
-                        asyncio.create_task(self._device.update_sensor("anamorphic"))
                     case SimpleCommands.LENS_ANIMORPHIC_D | "LENS_ANIMORPHIC_D":
                         res = await jvc.send_command(
                             "operation", code=jvc_cmd.Anamorphic.D
                         )
-                        asyncio.create_task(self._device.update_sensor("anamorphic"))
 
             elif cmd_id == Commands.SEND_CMD_SEQUENCE:
                 if params:

@@ -21,6 +21,8 @@ class JVCConfig:
     """Optional password for projector."""
     capabilities: list[str] | None = None
     """Cached list of supported projector capabilities (command names)."""
+    use_sensors: bool = True
+    """Enable or disable sensor entities."""
 
 
 @dataclass
@@ -160,5 +162,3 @@ class SimpleCommands(StrEnum):
     REMOTE_COLOR_TEMP = "Color Temp"
     REMOTE_3D_FORMAT = "3D Format"
     REMOTE_PIC_ADJ = "Picture Adjust"
-    REMOTE_NATURAL = "Natural"
-    REMOTE_CINEMA = "Cinema"

@@ -51,6 +51,13 @@ _MANUAL_INPUT_SCHEMA = RequestUserInput(
                 "en": "Password",
             },
         },
+        {
+            "field": {"checkbox": {"value": True}},
+            "id": "use_sensors",
+            "label": {
+                "en": "Enable Sensors",
+            },
+        },
     ],
 )
 
@@ -86,6 +93,13 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                     "en": "Password",
                 },
             },
+            {
+                "field": {"checkbox": {"value": True}},
+                "id": "use_sensors",
+                "label": {
+                    "en": "Enable Sensors",
+                },
+            },
         ]
 
     async def query_device(
@@ -100,6 +114,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         address = input_values.get("address", "").strip()
         password = input_values.get("password", "").strip()
         name = (input_values.get("name", "")).strip()
+        use_sensors = input_values.get("use_sensors", True)
 
         if not name or name == "":
             name = "JVC Projector"
@@ -144,6 +159,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                 address=address,
                 password=password,
                 capabilities=capabilities_list,
+                use_sensors=use_sensors,
             )
 
         except JvcProjectorError as ex:

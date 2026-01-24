@@ -68,8 +68,9 @@ class JVCProjector(StatelessHTTPDevice):
             # Convert list to dict format (same as jp.capabilities() returns)
             self._capabilities = {cmd: None for cmd in device_config.capabilities}
             self._capabilities_retrieved = True
-            # Build sensors immediately from cached capabilities
-            self._build_sensors_from_capabilities()
+            # Build sensors immediately from cached capabilities (only if enabled)
+            if device_config.use_sensors:
+                self._build_sensors_from_capabilities()
 
         self.attributes = MediaPlayerAttributes(
             STATE=None,
@@ -136,11 +137,17 @@ class JVCProjector(StatelessHTTPDevice):
             async with self._projector_lock:
                 await self._jvc_projector.connect()
 
+                # Get power state first
+                power_str = await self._jvc_projector.get(jvc_cmd.Power)
+                self._state = self._convert_power_state(str(power_str))
+
             # Discover and store capabilities if not already loaded from config (upgrade case)
-            if not self._capabilities_retrieved:
+            # Only attempt discovery if projector is ON
+            if not self._capabilities_retrieved and self._state == media_player.States.ON:
                 await self.discover_capabilities()
                 self._store_capabilities_in_config()
-                if self.driver:
+                # Only create sensor entities if use_sensors is enabled
+                if self.driver and self._device_config.use_sensors:
                     # Import here to avoid circular dependency
                     from sensor import JVCSensor
 
@@ -151,11 +158,8 @@ class JVCProjector(StatelessHTTPDevice):
                     ]
                     self.driver.add_entities(sensor_entities)
 
-            # Acquire lock again for state queries
+            # Acquire lock again for input queries
             async with self._projector_lock:
-                # Get power state
-                power_str = await self._jvc_projector.get(jvc_cmd.Power)
-                self._state = self._convert_power_state(str(power_str))
 
                 # Get input if projector is on
                 if self._state == media_player.States.ON:
@@ -277,6 +281,7 @@ class JVCProjector(StatelessHTTPDevice):
                         await self._jvc_projector.set(jvc_cmd.Input, remote_cmd)
                         self._active_source = kwargs["source"].upper()
                         self.attributes.SOURCE = self._active_source
+                        await self.update_sensor("input", value=self._active_source)
 
                     case "remote":
                         code = kwargs.get("code")
@@ -308,18 +313,13 @@ class JVCProjector(StatelessHTTPDevice):
 
                             await self._jvc_projector.set(cmd_class, code)
 
-                            # Find and update the corresponding sensor value
-                            for sensor_id, sensor_config in self.sensors.items():
-                                if sensor_config.query_command == cmd_class:
-                                    # Store the new value in the sensor config
-                                    sensor_config.value = code
-                                    _LOG.debug(
-                                        "[%s] Updated sensor '%s' value to %s",
-                                        self.name,
-                                        sensor_id,
-                                        code,
-                                    )
-                                    break
+                            # Find and update the corresponding sensor value if sensors are enabled
+                            if self._device_config.use_sensors:
+                                for sensor_id, sensor_config in self.sensors.items():
+                                    if sensor_config.query_command == cmd_class:
+                                        # Update sensor with the assigned value (no network call needed)
+                                        await self.update_sensor(sensor_id, value=code)
+                                        break
 
                     case _:
                         _LOG.warning("[%s] Unknown command: %s", self.name, command)
@@ -466,30 +466,45 @@ class JVCProjector(StatelessHTTPDevice):
             # Clear the task reference when done
             self._sensor_update_task = None
 
-    async def update_sensor(self, sensor_key: str) -> None:
+    async def update_sensor(self, sensor_key: str, value: Any = None) -> None:
         """Update a specific sensor value and trigger entity refresh.
 
         Args:
             sensor_key: The sensor identifier (e.g., 'picture_mode', 'low_latency')
+            value: Optional pre-assigned value to use instead of querying the projector
         """
         try:
-            # Get sensor config and query command
+            # Get sensor config
             sensor = self.sensors.get(sensor_key)
-            if not sensor or not sensor.query_command:
+            if not sensor:
                 _LOG.warning(
-                    "[%s] Sensor '%s' not found or has no query command",
+                    "[%s] Sensor '%s' not found",
                     self.name,
                     sensor_key,
                 )
                 return
 
-            # Only query value if projector is ON
-            if self.state == media_player.States.ON:
+            # Use provided value if available, otherwise query the projector
+            if value is not None:
+                # Use the assigned value directly (no network call)
+                sensor.value = value
+                _LOG.debug(
+                    "[%s] Sensor '%s' value set to %s (assigned)",
+                    self.name,
+                    sensor_key,
+                    value,
+                )
+            elif sensor.query_command and self.state == media_player.States.ON:
+                # Only query value if projector is ON and no value was provided
                 # Acquire lock to serialize access to projector
                 async with self._projector_lock:
                     # Query the specific sensor value and store in sensor config
                     sensor.value = await self._jvc_projector.get(sensor.query_command)
-                _LOG.debug("[%s] Sensor '%s' value updated", self.name, sensor_key)
+                _LOG.debug(
+                    "[%s] Sensor '%s' value updated (queried)",
+                    self.name,
+                    sensor_key,
+                )
             else:
                 _LOG.debug(
                     "[%s] Skipping sensor '%s' value query - projector state is %s",
