@@ -59,8 +59,6 @@ class JVCSensor(Sensor, FrameworkEntity):
             device_class=DeviceClasses.CUSTOM,
         )
 
-        self._device.register_sensor_entity(sensor_config.identifier, self)
-
     def refresh_state(self) -> None:
         """Refresh sensor state from device and update entity.
 

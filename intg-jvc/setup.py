@@ -5,53 +5,12 @@ from ipaddress import ip_address
 from typing import Any
 
 from const import JVCConfig
-from jvcprojector.projector import JvcProjector
+from jvcprojector import JvcProjector, command
+from jvcprojector.error import JvcProjectorError
 from ucapi import IntegrationSetupError, RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
 
 _LOG = logging.getLogger(__name__)
-
-_MANUAL_INPUT_SCHEMA = RequestUserInput(
-    {"en": "JVC Projector Setup"},
-    [
-        {
-            "id": "info",
-            "label": {
-                "en": "Setup your JVC Projector",
-            },
-            "field": {
-                "label": {
-                    "value": {
-                        "en": (
-                            "Please supply the IP address or Hostname of your JVC Projector."
-                        ),
-                    }
-                }
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "name",
-            "label": {
-                "en": "Projector Name",
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "address",
-            "label": {
-                "en": "IP Address",
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "password",
-            "label": {
-                "en": "Password",
-            },
-        },
-    ],
-)
 
 
 class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
@@ -67,7 +26,54 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
 
         :return: RequestUserInput with form fields for manual configuration
         """
-        return _MANUAL_INPUT_SCHEMA
+        return RequestUserInput(
+            {"en": "JVC Projector Setup"},
+            [
+                {
+                    "id": "info",
+                    "label": {
+                        "en": "Setup your JVC Projector",
+                    },
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": (
+                                    "Please supply the IP address or Hostname of your JVC Projector."
+                                ),
+                            }
+                        }
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "name",
+                    "label": {
+                        "en": "Projector Name",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "address",
+                    "label": {
+                        "en": "IP Address",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "password",
+                    "label": {
+                        "en": "Password",
+                    },
+                },
+                {
+                    "field": {"checkbox": {"value": True}},
+                    "id": "use_sensors",
+                    "label": {
+                        "en": "Enable Sensors",
+                    },
+                },
+            ],
+        )
 
     def get_additional_discovery_fields(self) -> list[dict]:
         return [
@@ -85,6 +91,13 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                     "en": "Password",
                 },
             },
+            {
+                "field": {"checkbox": {"value": True}},
+                "id": "use_sensors",
+                "label": {
+                    "en": "Enable Sensors",
+                },
+            },
         ]
 
     async def query_device(
@@ -99,6 +112,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         address = input_values.get("address", "").strip()
         password = input_values.get("password", "").strip()
         name = (input_values.get("name", "")).strip()
+        use_sensors = input_values.get("use_sensors", True)
 
         if not name or name == "":
             name = "JVC Projector"
@@ -106,7 +120,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         if not address:
             # Re-display the form if address is missing
             _LOG.warning("Address is required, re-displaying form")
-            return _MANUAL_INPUT_SCHEMA
+            return self.get_manual_entry_form()
 
         _LOG.debug("Connecting to JVC Projector at %s", address)
 
@@ -115,25 +129,38 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         except ValueError:
             _LOG.error("Invalid IP address provided: %s", address)
             _LOG.info("Please enter a valid IP address for the projector.")
-            return _MANUAL_INPUT_SCHEMA
+            return self.get_manual_entry_form()
 
         try:
             jvc = JvcProjector(address, password=password)
             try:
                 await jvc.connect()
-                info = await jvc.get_info()
+                # Get MAC address and model from connected projector
+                # info dict contains: {' ip', 'model', 'spec'}
+                mac = await jvc.get(command.MacAddress)
+                model = jvc.model
+                # Get capabilities to store in config
+                capabilities_dict = jvc.capabilities()
+                capabilities_list = (
+                    list(capabilities_dict.keys()) if capabilities_dict else []
+                )
             finally:
                 await jvc.disconnect()
-            _LOG.debug("JVC Projector info: %s", info)
+            _LOG.debug("JVC Projector MAC: %s, Model: %s", mac, model)
+            _LOG.debug(
+                "JVC Projector Capabilities: %d commands", len(capabilities_list)
+            )
 
             return JVCConfig(
-                identifier=info.get("mac", info.get("model", "jvc")),
+                identifier=mac if mac else model,
                 name=name,
                 address=address,
                 password=password,
+                capabilities=capabilities_list,
+                use_sensors=use_sensors,
             )
 
-        except Exception as ex:  # pylint: disable=broad-exception-caught
+        except JvcProjectorError as ex:
             _LOG.error("Unable to connect at Address: %s. Exception: %s", address, ex)
             _LOG.info(
                 "Please check if you entered the correct address of the projector"

@@ -1,9 +1,5 @@
 ucapi==0.5.1
-ucapi-framework==1.5.0
-aiohttp==3.9.3
-pyjvcprojector==1.1.2
-sddp-discovery-protocol==1.5.0
+ucapi-framework==1.6.7
+pyjvcprojector==2.0.1
 pyee>=9.0
-pydantic
-defusedxml==0.7.1
-requests
+sddp-discovery-protocol>=1.5.0
