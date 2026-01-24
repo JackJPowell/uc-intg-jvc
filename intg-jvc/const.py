@@ -78,6 +78,17 @@ SENSORS: Final[dict[str, SensorConfig]] = {
         name="Lamp Power",
         query_command=command.LightPower,
     ),
+    "LaserPower": SensorConfig(
+        identifier="laser_power",
+        name="Laser Power",
+        query_command=command.LaserPower,
+    ),
+    "LightTime": SensorConfig(
+        identifier="light_time",
+        name="Light Time",
+        query_command=command.LightTime,
+        unit="h",
+    ),
     "IntelligentLensAperture": SensorConfig(
         identifier="lens_aperture",
         name="Lens Aperture",
