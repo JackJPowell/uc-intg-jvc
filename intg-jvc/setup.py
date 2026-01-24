@@ -12,55 +12,6 @@ from ucapi_framework import BaseSetupFlow
 
 _LOG = logging.getLogger(__name__)
 
-_MANUAL_INPUT_SCHEMA = RequestUserInput(
-    {"en": "JVC Projector Setup"},
-    [
-        {
-            "id": "info",
-            "label": {
-                "en": "Setup your JVC Projector",
-            },
-            "field": {
-                "label": {
-                    "value": {
-                        "en": (
-                            "Please supply the IP address or Hostname of your JVC Projector."
-                        ),
-                    }
-                }
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "name",
-            "label": {
-                "en": "Projector Name",
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "address",
-            "label": {
-                "en": "IP Address",
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "password",
-            "label": {
-                "en": "Password",
-            },
-        },
-        {
-            "field": {"checkbox": {"value": True}},
-            "id": "use_sensors",
-            "label": {
-                "en": "Enable Sensors",
-            },
-        },
-    ],
-)
-
 
 class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
     """
@@ -75,7 +26,54 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
 
         :return: RequestUserInput with form fields for manual configuration
         """
-        return _MANUAL_INPUT_SCHEMA
+        return RequestUserInput(
+            {"en": "JVC Projector Setup"},
+            [
+                {
+                    "id": "info",
+                    "label": {
+                        "en": "Setup your JVC Projector",
+                    },
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": (
+                                    "Please supply the IP address or Hostname of your JVC Projector."
+                                ),
+                            }
+                        }
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "name",
+                    "label": {
+                        "en": "Projector Name",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "address",
+                    "label": {
+                        "en": "IP Address",
+                    },
+                },
+                {
+                    "field": {"text": {"value": ""}},
+                    "id": "password",
+                    "label": {
+                        "en": "Password",
+                    },
+                },
+                {
+                    "field": {"checkbox": {"value": True}},
+                    "id": "use_sensors",
+                    "label": {
+                        "en": "Enable Sensors",
+                    },
+                },
+            ],
+        )
 
     def get_additional_discovery_fields(self) -> list[dict]:
         return [
@@ -122,7 +120,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         if not address:
             # Re-display the form if address is missing
             _LOG.warning("Address is required, re-displaying form")
-            return _MANUAL_INPUT_SCHEMA
+            return self.get_manual_entry_form()
 
         _LOG.debug("Connecting to JVC Projector at %s", address)
 
@@ -131,7 +129,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
         except ValueError:
             _LOG.error("Invalid IP address provided: %s", address)
             _LOG.info("Please enter a valid IP address for the projector.")
-            return _MANUAL_INPUT_SCHEMA
+            return self.get_manual_entry_form()
 
         try:
             jvc = JvcProjector(address, password=password)
