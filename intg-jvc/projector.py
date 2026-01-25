@@ -9,20 +9,18 @@ from asyncio import AbstractEventLoop
 from copy import copy
 from typing import Any
 
-import aiohttp
 from const import (
     JVCConfig,
     SENSORS,
     SensorConfig,
 )
-from jvcprojector import JvcProjector as JvcLib
-from jvcprojector import command as jvc_cmd
+from jvcprojector import command as jvc_cmd, JvcProjector
 from jvcprojector.error import JvcProjectorError
 from ucapi import media_player, EntityTypes
 from ucapi.sensor import States as SensorStates
 from ucapi_framework import (
     BaseConfigManager,
-    StatelessHTTPDevice,
+    ExternalClientDevice,
     EntitySource,
     BaseIntegrationDriver,
 )
@@ -31,7 +29,7 @@ from ucapi_framework.helpers import MediaPlayerAttributes, SensorAttributes
 _LOG = logging.getLogger(__name__)
 
 
-class JVCProjector(StatelessHTTPDevice):
+class JVCProjector(ExternalClientDevice):
     """Representing a JVC Projector Device."""
 
     driver: BaseIntegrationDriver | None
@@ -43,16 +41,17 @@ class JVCProjector(StatelessHTTPDevice):
         config_manager: BaseConfigManager | None = None,
         driver: BaseIntegrationDriver | None = None,
     ) -> None:
-        """Create instance with stateless device base."""
+        """Create instance with external client device base."""
         self._device_config: JVCConfig
         super().__init__(
             device_config=device_config,
             loop=loop,
+            enable_watchdog=True,
+            watchdog_interval=30,
+            reconnect_delay=10,
+            max_reconnect_attempts=3,
             config_manager=config_manager,
             driver=driver,
-        )
-        self._jvc_projector = JvcLib(
-            host=device_config.address, password=device_config.password, timeout=5.0
         )
         self._projector_lock = asyncio.Lock()
         self._sensor_update_task: asyncio.Task | None = None
@@ -119,117 +118,112 @@ class JVCProjector(StatelessHTTPDevice):
             else self._device_config.identifier
         )
 
-    async def verify_connection(self) -> None:
-        """
-        Verify connection to the projector and emit current state.
+    # ─────────────────────────────────────────────────────────────────
+    # ExternalClientDevice abstract methods
+    # ─────────────────────────────────────────────────────────────────
 
-        This method is called by the framework to check device connectivity
-        and retrieve the current state. State updates are emitted via DeviceEvents.UPDATE.
+    async def create_client(self) -> Any:
+        """Create the JVC projector client instance."""
 
-        :raises: Exception if connection verification fails
-        """
-        _LOG.debug(
-            "[%s] Verifying connection to JVC projector at IP address: %s",
-            self.name,
-            self.address,
+        return JvcProjector(
+            host=self._device_config.address,
+            password=self._device_config.password,
+            timeout=5.0,
         )
 
+    async def connect_client(self) -> None:
+        """Connect to the JVC projector and initialize state."""
         try:
-            # Acquire lock to serialize access to projector
-            async with self._projector_lock:
-                try:
-                    _LOG.debug(
-                        "[%s] Attempting to connect to projector at %s",
-                        self.name,
-                        self.address,
-                    )
-                    await self._jvc_projector.connect()
-                    _LOG.debug("[%s] Connection established successfully", self.name)
-                except JvcProjectorError as err:
-                    _LOG.error(
-                        "[%s] Failed to connect to projector: %s",
-                        self.name,
-                        err,
-                    )
-                    raise
-
-                try:
-                    _LOG.debug("[%s] Querying power state", self.name)
-                    power_str = await self._jvc_projector.get(jvc_cmd.Power)
-                    self._state = self._convert_power_state(str(power_str))
-                    _LOG.debug("[%s] Power state: %s", self.name, self._state)
-                except JvcProjectorError as err:
-                    _LOG.error(
-                        "[%s] Failed to get power state: %s",
-                        self.name,
-                        err,
-                    )
-                    raise
-
-            # Discover and store capabilities if not already loaded from config (upgrade case)
-            # Only attempt discovery if projector is ON
-            if (
-                not self._capabilities_retrieved
-                and self._state == media_player.States.ON
-            ):
-                await self.discover_capabilities()
-                self._store_capabilities_in_config()
-                # Only create sensor entities if use_sensors is enabled
-                if self.driver and self._device_config.use_sensors:
-                    # Import here to avoid circular dependency
-                    from sensor import JVCSensor
-
-                    # Create sensor entities and register them
-                    sensor_entities: list[JVCSensor] = [
-                        JVCSensor(self.device_config, self, sensor_config)
-                        for sensor_config in self.sensors.values()
-                    ]
-                    self.driver.add_entities(sensor_entities)  # ty:ignore[invalid-argument-type]
-
-            # Acquire lock again for input queries
-            async with self._projector_lock:
-                # Get input if projector is on
-                if self._state == media_player.States.ON:
-                    input_value = await self._jvc_projector.get(jvc_cmd.Input)
-                    if input_value:
-                        self._active_source = input_value.upper()
-                        # Update input sensor config
-                        input_sensor = self.sensors.get("input")
-                        if input_sensor:
-                            input_sensor.value = input_value
-
-            # Update sensors in background task with delays, but only if not already running
-            if self._sensor_update_task is None or self._sensor_update_task.done():
-                self._sensor_update_task = asyncio.create_task(
-                    self._update_all_sensors()
-                )
-            else:
-                _LOG.debug(
-                    "[%s] Skipping sensor update - already in progress",
-                    self.name,
-                )
-
             _LOG.debug(
-                "[%s] Connection verified successfully, state: %s",
+                "[%s] Attempting to connect to projector at %s",
                 self.name,
-                self._state,
+                self.address,
             )
-
-            # Update attributes dataclass for framework to retrieve via get_device_attributes
-            self.attributes.STATE = self._state
-            self.attributes.SOURCE = self._active_source if self._active_source else ""
-            self.attributes.SOURCE_LIST = self._source_list
-
-        except aiohttp.ClientError as err:
-            _LOG.error("[%s] Connection verification failed: %s", self.name, err)
-            raise
-        except JvcProjectorError as err:  # pylint: disable=broad-exception-caught
+            await self._client.connect()
+            _LOG.debug("[%s] Connection established successfully", self.name)
+        except JvcProjectorError as err:
             _LOG.error(
-                "[%s] Unexpected error during connection verification: %s",
+                "[%s] Failed to connect to projector: %s",
                 self.name,
                 err,
             )
             raise
+
+        # Get initial power state
+        try:
+            _LOG.debug("[%s] Querying power state", self.name)
+            power_str = await self._client.get(jvc_cmd.Power)
+            self._state = self._convert_power_state(str(power_str))
+            _LOG.debug("[%s] Power state: %s", self.name, self._state)
+        except JvcProjectorError as err:
+            _LOG.error(
+                "[%s] Failed to get power state: %s",
+                self.name,
+                err,
+            )
+            raise
+
+        # Discover and store capabilities if not already loaded from config (upgrade case)
+        # Only attempt discovery if projector is ON
+        if not self._capabilities_retrieved and self._state == media_player.States.ON:
+            await self.discover_capabilities()
+            self._store_capabilities_in_config()
+            # Only create sensor entities if use_sensors is enabled
+            if self.driver and self._device_config.use_sensors:
+                # Import here to avoid circular dependency
+                from sensor import JVCSensor
+
+                # Create sensor entities and register them
+                sensor_entities: list[JVCSensor] = [
+                    JVCSensor(self.device_config, self, sensor_config)
+                    for sensor_config in self.sensors.values()
+                ]
+                self.driver.add_entities(sensor_entities)  # ty:ignore[invalid-argument-type]
+
+        # Get input if projector is on
+        if self._state == media_player.States.ON:
+            async with self._projector_lock:
+                input_value = await self._client.get(jvc_cmd.Input)
+                if input_value:
+                    self._active_source = input_value.upper()
+                    # Update input sensor config
+                    input_sensor = self.sensors.get("input")
+                    if input_sensor:
+                        input_sensor.value = input_value
+
+        # Update sensors in background task
+        if self._sensor_update_task is None or self._sensor_update_task.done():
+            self._sensor_update_task = asyncio.create_task(self._update_all_sensors())
+
+        # Update attributes dataclass
+        self.attributes.STATE = self._state
+        self.attributes.SOURCE = self._active_source if self._active_source else ""
+        self.attributes.SOURCE_LIST = self._source_list
+
+    async def disconnect_client(self) -> None:
+        """Disconnect from the JVC projector."""
+        # Stop sensor update task if running
+        if self._sensor_update_task and not self._sensor_update_task.done():
+            self._sensor_update_task.cancel()
+            try:
+                await self._sensor_update_task
+            except asyncio.CancelledError:
+                pass
+            self._sensor_update_task = None
+
+        # JvcLib doesn't have an explicit disconnect method
+        # The connection is managed internally
+        _LOG.debug("[%s] Disconnected from projector", self.name)
+
+    def check_client_connected(self) -> bool:
+        """Check if the JVC projector client is connected."""
+        # JvcLib doesn't expose a connected property
+        # Return True if client exists; watchdog will detect issues when commands fail
+        return self._client is not None
+
+    # ─────────────────────────────────────────────────────────────────
+    # Device command handling
+    # ─────────────────────────────────────────────────────────────────
 
     async def send_command(self, command: str, *args: Any, **kwargs: Any) -> None:
         """
@@ -255,39 +249,33 @@ class JVCProjector(StatelessHTTPDevice):
             async with self._projector_lock:
                 match command:
                     case "powerOn":
-                        power = await self._jvc_projector.get(jvc_cmd.Power)
+                        power = await self._client.get(jvc_cmd.Power)
                         # Normalize power state from API
                         power_state = self._convert_power_state(str(power))
                         if power_state in [
                             media_player.States.STANDBY,
                             media_player.States.OFF,
                         ]:
-                            await self._jvc_projector.set(
-                                jvc_cmd.Power, jvc_cmd.Power.ON
-                            )
+                            await self._client.set(jvc_cmd.Power, jvc_cmd.Power.ON)
                         self._state = media_player.States.ON
                         self.attributes.STATE = media_player.States.ON
                         # Delay sensor updates for 60 seconds to allow projector to warm up
                         asyncio.create_task(self._delayed_sensor_update(60))
                     case "powerOff":
-                        power = await self._jvc_projector.get(jvc_cmd.Power)
+                        power = await self._client.get(jvc_cmd.Power)
                         # Normalize power state from API
                         power_state = self._convert_power_state(str(power))
                         if power_state == media_player.States.ON:
-                            await self._jvc_projector.set(
-                                jvc_cmd.Power, jvc_cmd.Power.OFF
-                            )
+                            await self._client.set(jvc_cmd.Power, jvc_cmd.Power.OFF)
                         self._state = media_player.States.STANDBY
                         self.attributes.STATE = media_player.States.STANDBY
                         await self._update_all_sensors()
                     case "powerToggle":
-                        power = await self._jvc_projector.get(jvc_cmd.Power)
+                        power = await self._client.get(jvc_cmd.Power)
                         # Normalize power state from API
                         power_state = self._convert_power_state(str(power))
                         if power_state == media_player.States.ON:
-                            await self._jvc_projector.set(
-                                jvc_cmd.Power, jvc_cmd.Power.OFF
-                            )
+                            await self._client.set(jvc_cmd.Power, jvc_cmd.Power.OFF)
                             self._state = media_player.States.STANDBY
                             self.attributes.STATE = media_player.States.STANDBY
                             await self._update_all_sensors()
@@ -295,9 +283,7 @@ class JVCProjector(StatelessHTTPDevice):
                             media_player.States.STANDBY,
                             media_player.States.OFF,
                         ]:
-                            await self._jvc_projector.set(
-                                jvc_cmd.Power, jvc_cmd.Power.ON
-                            )
+                            await self._client.set(jvc_cmd.Power, jvc_cmd.Power.ON)
                             self._state = media_player.States.ON
                             self.attributes.STATE = media_player.States.ON
                             asyncio.create_task(self._delayed_sensor_update(60))
@@ -310,7 +296,7 @@ class JVCProjector(StatelessHTTPDevice):
                         source = kwargs.get("source", "")
                         if source.upper() == "HDMI2":
                             remote_cmd = jvc_cmd.Remote.HDMI2
-                        await self._jvc_projector.set(jvc_cmd.Input, remote_cmd)
+                        await self._client.set(jvc_cmd.Input, remote_cmd)
                         self._active_source = kwargs["source"].upper()
                         self.attributes.SOURCE = self._active_source
                         await self.update_sensor("input", value=self._active_source)
@@ -320,20 +306,20 @@ class JVCProjector(StatelessHTTPDevice):
                         if code:
                             # For Remote commands, just check if Remote class is supported
                             # Individual remote values don't need separate support checks
-                            if not self._jvc_projector.supports(jvc_cmd.Remote):
+                            if not self._client.supports(jvc_cmd.Remote):
                                 _LOG.warning(
                                     "[%s] Remote commands not supported",
                                     self.name,
                                 )
                                 return
-                            await self._jvc_projector.remote(code)
+                            await self._client.remote(code)
 
                     case "operation":
                         cmd_class = kwargs.get("cmd_class")
                         value = kwargs.get("value")
                         if cmd_class and value is not None:
                             # Operation commands use set() with command class and value
-                            if not self._jvc_projector.supports(cmd_class):
+                            if not self._client.supports(cmd_class):
                                 _LOG.warning(
                                     "[%s] Operation command %s not supported",
                                     self.name,
@@ -341,7 +327,7 @@ class JVCProjector(StatelessHTTPDevice):
                                 )
                                 return
 
-                            await self._jvc_projector.set(cmd_class, value)
+                            await self._client.set(cmd_class, value)
 
                             # Find and update the corresponding sensor value if sensors are enabled
                             if self._device_config.use_sensors:
@@ -403,7 +389,7 @@ class JVCProjector(StatelessHTTPDevice):
         try:
             async with self._projector_lock:
                 # Get capabilities and projector info
-                self._capabilities = self._jvc_projector.capabilities()
+                self._capabilities = self._client.capabilities()
 
             # Build sensor list from supported queryable commands
             self._build_sensors_from_capabilities()
@@ -462,7 +448,7 @@ class JVCProjector(StatelessHTTPDevice):
                         if sensor.query_command:
                             try:
                                 # Use new get() API with command classes
-                                sensor.value = await self._jvc_projector.get(
+                                sensor.value = await self._client.get(
                                     sensor.query_command
                                 )
                                 await asyncio.sleep(0.25)
@@ -544,7 +530,7 @@ class JVCProjector(StatelessHTTPDevice):
                 # Acquire lock to serialize access to projector
                 async with self._projector_lock:
                     # Query the specific sensor value and store in sensor config
-                    sensor.value = await self._jvc_projector.get(sensor.query_command)
+                    sensor.value = await self._client.get(sensor.query_command)
                 _LOG.debug(
                     "[%s] Sensor '%s' value updated (queried)",
                     self.name,
