@@ -529,7 +529,7 @@ wheels = [
 
 [[package]]
 name = "uc-intg-jvc"
-version = "1.2.1"
+version = "1.2.2"
 source = { virtual = "." }
 dependencies = [
     { name = "pyee" },
@@ -545,7 +545,7 @@ requires-dist = [
     { name = "pyjvcprojector", specifier = "==2.0.1" },
     { name = "sddp-discovery-protocol", specifier = ">=1.5.0" },
     { name = "ucapi", specifier = "==0.5.1" },
-    { name = "ucapi-framework", specifier = "==1.7.0" },
+    { name = "ucapi-framework", specifier = "==1.7.2" },
 ]
 
 [[package]]
@@ -565,16 +565,16 @@ wheels = [
 
 [[package]]
 name = "ucapi-framework"
-version = "1.7.0"
+version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "pyee" },
     { name = "ucapi" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/3a/0a0554c83dd027f43f7461489b1388caf8ca60f89be7165b7a24fc6e810c/ucapi_framework-1.7.0.tar.gz", hash = "sha256:a34b7e66ef69ed1a9c84f832fb885bfb7a96484336e9156672cb23618a6af14e", size = 125747, upload-time = "2026-01-25T17:40:09.255Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/81/bc54173dc802a19b832af9a5be3f22361e83c7203b8f83b9a5ac369bb55b/ucapi_framework-1.7.2.tar.gz", hash = "sha256:0d24707753efa19a803a5047a4993d75866ca332af712101bd8529a00237c057", size = 125909, upload-time = "2026-01-25T19:02:41.244Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/2b/25c3f44bab0ab642d16146a9ac4803f0e90865a06b208798bb277322fa28/ucapi_framework-1.7.0-py3-none-any.whl", hash = "sha256:a47df2a09d59a5f0ff8c48bf0a14420403dd242f3bd209bf5025b46804751eaf", size = 73249, upload-time = "2026-01-25T17:40:07.764Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/b8/e16750697d0a479f83bff60b170f4deac64941ae261244faf68fd7633e6d/ucapi_framework-1.7.2-py3-none-any.whl", hash = "sha256:ea1ae297ecd6e9b0d072dd979f9796e6539d385c36fa3147ad0ba767b7836b5a", size = 73358, upload-time = "2026-01-25T19:02:39.845Z" },
 ]
 
 [[package]]
