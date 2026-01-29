@@ -1,6 +1,6 @@
 [project]
 name = "uc-intg-jvc"
-version = "1.2.3"
+version = "1.2.4"
 description = "Unfolded Circle JVC Projector Integration"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,5 +9,5 @@ dependencies = [
     "pyjvcprojector==2.0.1",
     "sddp-discovery-protocol>=1.5.0",
     "ucapi==0.5.1",
-    "ucapi-framework==1.7.2",
+    "ucapi-framework==1.8.2",
 ]
