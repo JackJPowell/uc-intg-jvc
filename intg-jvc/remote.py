@@ -24,7 +24,7 @@ from ucapi.ui import (
     create_ui_icon,
     Size,
 )
-from ucapi_framework import create_entity_id
+from ucapi_framework import create_entity_id, Entity
 
 _LOG = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ JVC_REMOTE_STATE_MAPPING = {
 }
 
 
-class JVCRemote(Remote):
+class JVCRemote(Remote, Entity):
     """Representation of a JVC Remote entity."""
 
     def __init__(self, config_device: JVCConfig, device: projector.JVCProjector):
@@ -93,6 +93,8 @@ class JVCRemote(Remote):
         if params:
             repeat = self.get_int_param("repeat", params, 1)
 
+        repeat = max(1, repeat)  # Ensure at least one execution
+
         for _i in range(0, repeat):
             await self.handle_command(cmd_id, params)
         return StatusCodes.OK
@@ -103,25 +105,21 @@ class JVCRemote(Remote):
         """Handle command."""
         command = ""
         delay = 0
+        res = None
 
         if params:
             command = params.get("command", "")
             delay = self.get_int_param("delay", params, 0)
 
-        if command == "":
-            command = f"remote.{cmd_id}"
-
-        _LOG.info("Got command request: %s %s", cmd_id, params if params else "")
-
         jvc = self._device
-        res = None
+
         try:
-            if command == "remote.on":
+            if cmd_id == media_player.Commands.ON:
                 _LOG.debug("Sending ON command to JVC")
                 res = await jvc.send_command("powerOn")
-            elif command == "remote.off":
+            elif cmd_id == media_player.Commands.OFF:
                 res = await jvc.send_command("powerOff")
-            elif command == "remote.toggle":
+            elif cmd_id == media_player.Commands.TOGGLE:
                 res = await jvc.send_command("powerToggle")
             elif cmd_id == Commands.SEND_CMD:
                 match command:
