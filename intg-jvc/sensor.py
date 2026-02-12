@@ -42,7 +42,7 @@ class JVCSensor(Sensor, FrameworkEntity):
         )
 
         attributes: dict[str, Any] = {
-            Attributes.STATE: States.UNKNOWN,
+            Attributes.STATE: States.UNAVAILABLE,
             Attributes.VALUE: sensor_config.default,
         }
 
@@ -59,12 +59,21 @@ class JVCSensor(Sensor, FrameworkEntity):
             device_class=DeviceClasses.CUSTOM,
         )
 
-    def refresh_state(self) -> None:
-        """Refresh sensor state from device and update entity.
+    def update_value(self, value: Any) -> None:
+        """Update sensor value (entity owns state).
 
-        This method is called by the device after updating sensor values.
-        It retrieves the current attributes and uses entity.update() to
-        notify the framework.
+        Args:
+            value: New value from projector
         """
+        self.attributes[Attributes.VALUE] = value
+        self.attributes[Attributes.STATE] = States.ON
+        self.update(self.attributes)
 
-        self.update(self._device.get_device_attributes(self.id))
+        _LOG.debug("[%s] Updated value to: %s", self._sensor_id, value)
+
+    def set_unavailable(self) -> None:
+        """Mark sensor unavailable."""
+        self.attributes[Attributes.STATE] = States.UNAVAILABLE
+        self.update(self.attributes)
+
+        _LOG.debug("[%s] Set to unavailable", self._sensor_id)

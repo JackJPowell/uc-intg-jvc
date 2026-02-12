@@ -31,7 +31,7 @@ class JVCConfig:
 
 @dataclass
 class SensorConfig:
-    """Configuration for a sensor entity."""
+    """Configuration metadata for a sensor entity."""
 
     identifier: str
     """Unique identifier for the sensor (e.g., 'picture_mode'). Also used as key in state_dict."""
@@ -43,15 +43,11 @@ class SensorConfig:
     """Unit of measurement (optional)."""
     default: str = ""
     """Default value when sensor is unavailable."""
-    value: str | None = None
-    """Current runtime value of the sensor."""
-    entity: Any = None
-    """Reference to the registered sensor entity instance."""
 
 
 @dataclass
 class SelectConfig:
-    """Configuration for a select entity."""
+    """Configuration metadata for a select entity."""
 
     identifier: str
     """Unique identifier for the select (e.g., 'picture_mode_select')."""
@@ -61,10 +57,6 @@ class SelectConfig:
     """Command class for both getting and setting values (e.g., command.PictureMode)."""
     options: list[str] | None = None
     """List of valid options (populated at runtime from projector spec)."""
-    value: str | None = None
-    """Current runtime value of the select."""
-    entity: Any = None
-    """Reference to the registered select entity instance."""
 
 
 # Map of command class names to sensor configurations
@@ -201,42 +193,42 @@ class SimpleCommands(StrEnum):
 # Options are populated at runtime based on projector spec
 SELECTS: Final[dict[str, SelectConfig]] = {
     "PictureMode": SelectConfig(
-        identifier="picture_mode_select",
+        identifier="picture_mode",
         name="Picture Mode",
         command_class=command.PictureMode,
     ),
     "IntelligentLensAperture": SelectConfig(
-        identifier="lens_aperture_select",
+        identifier="lens_aperture",
         name="Lens Aperture",
         command_class=command.IntelligentLensAperture,
     ),
     "ColorProfile": SelectConfig(
-        identifier="color_profile_select",
+        identifier="color_profile",
         name="Color Profile",
         command_class=command.ColorProfile,
     ),
     "Anamorphic": SelectConfig(
-        identifier="anamorphic_select",
+        identifier="anamorphic",
         name="Anamorphic",
         command_class=command.Anamorphic,
     ),
     "LowLatencyMode": SelectConfig(
-        identifier="low_latency_select",
+        identifier="low_latency",
         name="Low Latency Mode",
         command_class=command.LowLatencyMode,
     ),
     "Mask": SelectConfig(
-        identifier="mask_select",
+        identifier="mask",
         name="Mask",
         command_class=command.Mask,
     ),
     "LightPower": SelectConfig(
-        identifier="lamp_power_select",
+        identifier="lamp_power",
         name="Lamp Power",
         command_class=command.LightPower,
     ),
     "InstallationMode": SelectConfig(
-        identifier="installation_mode_select",
+        identifier="installation_mode",
         name="Installation Mode",
         command_class=command.InstallationMode,
     ),
