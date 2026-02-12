@@ -135,10 +135,10 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
             jvc = JvcProjector(address, password=password)
             try:
                 await jvc.connect()
-                # Get MAC address and model from connected projector
-                # info dict contains: {' ip', 'model', 'spec'}
+                # Get MAC address, model, and spec from connected projector
                 mac = await jvc.get(command.MacAddress)
                 model = jvc.model
+                spec = jvc.spec
                 # Get capabilities to store in config
                 capabilities_dict = jvc.capabilities()
                 capabilities_list = (
@@ -146,7 +146,7 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                 )
             finally:
                 await jvc.disconnect()
-            _LOG.debug("JVC Projector MAC: %s, Model: %s", mac, model)
+            _LOG.debug("JVC Projector MAC: %s, Model: %s, Spec: %s", mac, model, spec)
             _LOG.debug(
                 "JVC Projector Capabilities: %d commands", len(capabilities_list)
             )
@@ -157,6 +157,8 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
                 address=address,
                 password=password,
                 capabilities=capabilities_list,
+                spec=spec,
+                model=model,
                 use_sensors=use_sensors,
             )
 

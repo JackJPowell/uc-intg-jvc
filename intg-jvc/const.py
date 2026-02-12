@@ -21,6 +21,10 @@ class JVCConfig:
     """Optional password for projector."""
     capabilities: list[str] | None = None
     """Cached list of supported projector capabilities (command names)."""
+    spec: str | None = None
+    """Projector specification (e.g., 'CS20171')."""
+    model: str | None = None
+    """Projector model (e.g., 'XHR1')."""
     use_sensors: bool = True
     """Enable or disable sensor entities."""
 
@@ -43,6 +47,24 @@ class SensorConfig:
     """Current runtime value of the sensor."""
     entity: Any = None
     """Reference to the registered sensor entity instance."""
+
+
+@dataclass
+class SelectConfig:
+    """Configuration for a select entity."""
+
+    identifier: str
+    """Unique identifier for the select (e.g., 'picture_mode_select')."""
+    name: str
+    """Human-readable name for the select."""
+    command_class: Any = None
+    """Command class for both getting and setting values (e.g., command.PictureMode)."""
+    options: list[str] | None = None
+    """List of valid options (populated at runtime from projector spec)."""
+    value: str | None = None
+    """Current runtime value of the select."""
+    entity: Any = None
+    """Reference to the registered select entity instance."""
 
 
 # Map of command class names to sensor configurations
@@ -173,3 +195,49 @@ class SimpleCommands(StrEnum):
     REMOTE_COLOR_TEMP = "Color Temp"
     REMOTE_3D_FORMAT = "3D Format"
     REMOTE_PIC_ADJ = "Picture Adjust"
+
+
+# Map of command class names to select configurations
+# Options are populated at runtime based on projector spec
+SELECTS: Final[dict[str, SelectConfig]] = {
+    "PictureMode": SelectConfig(
+        identifier="picture_mode_select",
+        name="Picture Mode",
+        command_class=command.PictureMode,
+    ),
+    "IntelligentLensAperture": SelectConfig(
+        identifier="lens_aperture_select",
+        name="Lens Aperture",
+        command_class=command.IntelligentLensAperture,
+    ),
+    "ColorProfile": SelectConfig(
+        identifier="color_profile_select",
+        name="Color Profile",
+        command_class=command.ColorProfile,
+    ),
+    "Anamorphic": SelectConfig(
+        identifier="anamorphic_select",
+        name="Anamorphic",
+        command_class=command.Anamorphic,
+    ),
+    "LowLatencyMode": SelectConfig(
+        identifier="low_latency_select",
+        name="Low Latency Mode",
+        command_class=command.LowLatencyMode,
+    ),
+    "Mask": SelectConfig(
+        identifier="mask_select",
+        name="Mask",
+        command_class=command.Mask,
+    ),
+    "LightPower": SelectConfig(
+        identifier="lamp_power_select",
+        name="Lamp Power",
+        command_class=command.LightPower,
+    ),
+    "InstallationMode": SelectConfig(
+        identifier="installation_mode_select",
+        name="Installation Mode",
+        command_class=command.InstallationMode,
+    ),
+}

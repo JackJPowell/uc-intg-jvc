@@ -12,7 +12,9 @@ from typing import Any
 from const import (
     JVCConfig,
     SENSORS,
+    SELECTS,
     SensorConfig,
+    SelectConfig,
 )
 from jvcprojector import command as jvc_cmd, JvcProjector
 from jvcprojector.error import JvcProjectorError
@@ -61,17 +63,19 @@ class JVCProjector(ExternalClientDevice):
         self._capabilities: dict[str, Any] = {}
         self._capabilities_retrieved = False
 
-        # Initialize empty sensors dict first
+        # Initialize empty sensors and selects dicts
         self.sensors: dict[str, SensorConfig] = {}
+        self.selects: dict[str, SelectConfig] = {}
 
         # Load capabilities from config if available and build sensors immediately
         if device_config.capabilities:
             # Convert list to dict format (same as jp.capabilities() returns)
             self._capabilities = {cmd: None for cmd in device_config.capabilities}
             self._capabilities_retrieved = True
-            # Build sensors immediately from cached capabilities (only if enabled)
+            # Build sensors and selects immediately from cached capabilities
             if device_config.use_sensors:
                 self._build_sensors_from_capabilities()
+            self._build_selects_from_capabilities()
 
         self.attributes = MediaPlayerAttributes(
             STATE=None,
@@ -167,7 +171,7 @@ class JVCProjector(ExternalClientDevice):
         # Only attempt discovery if projector is ON
         if not self._capabilities_retrieved and self._state == media_player.States.ON:
             await self.discover_capabilities()
-            self._store_capabilities_in_config()
+            self._store_capabilities_and_spec_in_config()
             # Only create sensor entities if use_sensors is enabled
             if self.driver and self._device_config.use_sensors:
                 # Import here to avoid circular dependency
@@ -178,7 +182,19 @@ class JVCProjector(ExternalClientDevice):
                     JVCSensor(self.device_config, self, sensor_config)
                     for sensor_config in self.sensors.values()
                 ]
-                self.driver.add_entities(sensor_entities)  # ty:ignore[invalid-argument-type]
+                self.driver.add_entities(sensor_entities)  # type:ignore[arg-type]
+
+            # Create select entities
+            if self.driver and self.selects:
+                # Import here to avoid circular dependency
+                from jvc_select import JVCSelect
+
+                # Create select entities and register them
+                select_entities: list[JVCSelect] = [
+                    JVCSelect(self.device_config, self, select_config)
+                    for select_config in self.selects.values()
+                ]
+                self.driver.add_entities(select_entities)  # type: ignore[arg-type]
 
         # Get input if projector is on
         if self._state == media_player.States.ON:
@@ -337,6 +353,15 @@ class JVCProjector(ExternalClientDevice):
                                         await self.update_sensor(sensor_id, value=value)
                                         break
 
+                            # Find and update the corresponding select entity
+                            for select_id, select_config in self.selects.items():
+                                if select_config.command_class == cmd_class:
+                                    # Sync the select entity value
+                                    await self._sync_sensor_from_select(
+                                        select_id, value
+                                    )
+                                    break
+
                     case _:
                         _LOG.warning("[%s] Unknown command: %s", self.name, command)
 
@@ -382,7 +407,7 @@ class JVCProjector(ExternalClientDevice):
         return self.attributes
 
     async def discover_capabilities(self) -> None:
-        """Discover projector capabilities and build dynamic sensor list.
+        """Discover projector capabilities and build dynamic sensor/select lists.
 
         This must be called after connection is established.
         """
@@ -391,7 +416,22 @@ class JVCProjector(ExternalClientDevice):
                 # Get capabilities and projector info
                 self._capabilities = self._client.capabilities()
 
+                # Get spec and model if not already stored
+                if not self._device_config.spec:
+                    self._device_config.spec = self._client.spec
+                    self._device_config.model = self._client.model
+                    _LOG.info(
+                        "[%s] Detected spec: %s, model: %s",
+                        self.name,
+                        self._device_config.spec,
+                        self._device_config.model,
+                    )
+
             # Build sensor list from supported queryable commands
+            self._build_sensors_from_capabilities()
+
+            # Build select list from supported operation commands
+            self._build_selects_from_capabilities()
             self._build_sensors_from_capabilities()
 
         except JvcProjectorError as err:
@@ -421,8 +461,152 @@ class JVCProjector(ExternalClientDevice):
 
         self.sensors = new_sensors
 
-    def _store_capabilities_in_config(self) -> None:
-        """Store discovered capabilities in config for future use."""
+    def _build_selects_from_capabilities(self) -> None:
+        """Filter SELECTS dict based on projector capabilities and populate options."""
+        if not self._device_config.spec:
+            _LOG.warning(
+                "[%s] Cannot build selects: spec not available in config",
+                self.name,
+            )
+            return
+
+        new_selects = {}
+
+        # Add selects for discovered capabilities
+        for cmd_name in self._capabilities:
+            if cmd_name in SELECTS:
+                # Create a copy to avoid sharing instances between devices
+                select_config = copy(SELECTS[cmd_name])
+                select_id = select_config.identifier
+
+                # Extract options from command description
+                try:
+                    options = self._extract_command_options(select_config.command_class)
+                    if options:
+                        select_config.options = options
+                        _LOG.debug(
+                            "[%s] Adding select: %s (command: %s, options: %d)",
+                            self.name,
+                            select_id,
+                            cmd_name,
+                            len(options),
+                        )
+                        new_selects[select_id] = select_config
+                    else:
+                        _LOG.warning(
+                            "[%s] No options found for select %s, skipping",
+                            self.name,
+                            select_id,
+                        )
+                except JvcProjectorError as err:
+                    _LOG.warning(
+                        "[%s] Failed to get options for %s: %s",
+                        self.name,
+                        select_id,
+                        err,
+                    )
+
+        self.selects = new_selects
+
+    def _extract_command_options(self, command_class: Any) -> list[str]:
+        """Extract valid options from a command's describe() output.
+
+        Args:
+            command_class: The command class (e.g., command.PictureMode)
+
+        Returns:
+            List of valid option strings for this command
+        """
+        try:
+            description = self._client.describe(command_class)
+            if not description or "parameter" not in description:
+                return []
+
+            param = description["parameter"]
+
+            # MapParameter returns {"read": {...}, "write": {...}}
+            if isinstance(param, dict) and "write" in param:
+                # Return the human-readable values (not the hex codes)
+                return list(param["write"].values())
+
+            return []
+
+        except JvcProjectorError:
+            return []
+
+    async def _sync_select_from_sensor(self, sensor_id: str, value: str) -> None:
+        """Update select entity when sensor value changes.
+
+        Args:
+            sensor_id: Sensor identifier
+            value: New value from sensor
+        """
+        if not self.driver or not value:
+            return
+
+        # Map sensor IDs to select IDs
+        sensor_to_select_map = {
+            "picture_mode": "picture_mode_select",
+            "lens_aperture": "lens_aperture_select",
+            "color_profile": "color_profile_select",
+            "anamorphic": "anamorphic_select",
+            "low_latency": "low_latency_select",
+            "mask": "mask_select",
+            "lamp_power": "lamp_power_select",
+        }
+
+        select_id = sensor_to_select_map.get(sensor_id)
+        if not select_id:
+            return
+
+        # Find and update the corresponding select entity
+        select_entities = self.driver.filter_entities_by_type(
+            EntityTypes.SELECT, EntitySource.CONFIGURED
+        )
+        for entity in select_entities:
+            if select_id in entity.id:
+                entity.update_value(value)  # type:ignore[attr-defined]
+                break
+
+    async def _sync_sensor_from_select(self, select_id: str, value: str) -> None:
+        """Update sensor entity when select value changes.
+
+        Args:
+            select_id: Select identifier
+            value: New value from select
+        """
+        if not self.driver or not value:
+            return
+
+        # Map select IDs to sensor IDs
+        select_to_sensor_map = {
+            "picture_mode_select": "picture_mode",
+            "lens_aperture_select": "lens_aperture",
+            "color_profile_select": "color_profile",
+            "anamorphic_select": "anamorphic",
+            "low_latency_select": "low_latency",
+            "mask_select": "mask",
+            "lamp_power_select": "lamp_power",
+        }
+
+        sensor_id = select_to_sensor_map.get(select_id)
+        if not sensor_id or sensor_id not in self.sensors:
+            return
+
+        # Update the sensor config value
+        self.sensors[sensor_id].value = value
+
+        # Find and update the corresponding sensor entity
+        sensor_entities = self.driver.filter_entities_by_type(
+            EntityTypes.SENSOR, EntitySource.CONFIGURED
+        )
+        for entity in sensor_entities:
+            if sensor_id in entity.id:
+                entity.update_sensor(value)  # type:ignore[attr-defined]
+                break
+
+    def _store_capabilities_and_spec_in_config(self) -> None:
+        """Store discovered capabilities, spec, and model in config for future use."""
         if not self._capabilities or not self._config_manager:
             return
 
@@ -430,9 +614,11 @@ class JVCProjector(ExternalClientDevice):
         self._device_config.capabilities = capabilities_list
         self.update_config()
         _LOG.info(
-            "[%s] Stored %d capabilities in config",
+            "[%s] Stored %d capabilities, spec: %s, model: %s in config",
             self.name,
             len(capabilities_list),
+            self._device_config.spec,
+            self._device_config.model,
         )
 
     async def _update_all_sensors(self) -> None:
@@ -451,6 +637,12 @@ class JVCProjector(ExternalClientDevice):
                                 sensor.value = await self._client.get(
                                     sensor.query_command
                                 )
+
+                                # Update corresponding select entity if it exists
+                                await self._sync_select_from_sensor(
+                                    sensor_id, sensor.value
+                                )
+
                                 await asyncio.sleep(0.25)
                             except JvcProjectorError as err:
                                 _LOG.warning(
@@ -474,7 +666,15 @@ class JVCProjector(ExternalClientDevice):
                     EntityTypes.SENSOR, EntitySource.CONFIGURED
                 )
                 for entity in sensor_entities:
-                    entity.refresh_state()  # ty:ignore[unresolved-attribute]
+                    entity.refresh_state()  # type:ignore[attr-defined]
+
+                # Also update select entities
+                select_entities = self.driver.filter_entities_by_type(
+                    EntityTypes.SELECT, EntitySource.CONFIGURED
+                )
+                for entity in select_entities:
+                    if self.state != media_player.States.ON:
+                        entity.set_unavailable()  # type:ignore[attr-defined]
 
         except JvcProjectorError as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
