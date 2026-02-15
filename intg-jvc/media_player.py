@@ -77,7 +77,6 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
             "Got %s command request: %s %s", entity.id, cmd_id, params if params else ""
         )
         res = None
-        state_changed = False  # Track if command changes device state
 
         try:
             jvc = self._device
@@ -86,13 +85,10 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
                 case media_player.Commands.ON:
                     _LOG.debug("Sending ON command to Projector")
                     res = await jvc.send_command("powerOn")
-                    state_changed = True
                 case media_player.Commands.OFF:
                     res = await jvc.send_command("powerOff")
-                    state_changed = True
                 case media_player.Commands.TOGGLE:
                     res = await jvc.send_command("powerToggle")
-                    state_changed = True
                 case media_player.Commands.CURSOR_UP:
                     res = await jvc.send_command("remote", code=jvc_cmd.Remote.UP)
                 case media_player.Commands.CURSOR_DOWN:
@@ -115,7 +111,6 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
                             "setInput",
                             source=params.get("source"),
                         )
-                        state_changed = True
                 case SimpleCommands.REMOTE_ADVANCED_MENU:
                     res = await jvc.send_command(
                         "remote", code=jvc_cmd.Remote.ADVANCED_MENU
@@ -440,10 +435,41 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
             _LOG.error("Error executing command %s: %s", cmd_id, ex)
             return ucapi.StatusCodes.BAD_REQUEST
 
-        # Update entity state if command changed device state
-        # Framework Entity.update() calls get_device_attributes() to retrieve updated attributes
-        if state_changed and isinstance(entity, FrameworkEntity):
-            self.update(jvc.attributes)
-
         _LOG.debug("Command %s executed successfully: %s", cmd_id, res)
         return ucapi.StatusCodes.OK
+
+    def update_power_state(self, state: media_player.States) -> None:
+        """Update power state.
+
+        Args:
+            state: New power state
+        """
+        self.attributes[Attributes.STATE] = state
+        self.update(self.attributes)
+        _LOG.debug("Media player power state updated to: %s", state)
+
+    def update_source(self, source: str) -> None:
+        """Update active source.
+
+        Args:
+            source: New source value
+        """
+        self.attributes[Attributes.SOURCE] = source
+        self.update(self.attributes)
+        _LOG.debug("Media player source updated to: %s", source)
+
+    def update_all(
+        self, state: media_player.States, source: str, source_list: list[str]
+    ) -> None:
+        """Update all attributes.
+
+        Args:
+            state: Power state
+            source: Active source
+            source_list: List of available sources
+        """
+        self.attributes[Attributes.STATE] = state
+        self.attributes[Attributes.SOURCE] = source
+        self.attributes[Attributes.SOURCE_LIST] = source_list
+        self.update(self.attributes)
+        _LOG.debug("Media player all attributes updated")
