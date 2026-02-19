@@ -59,8 +59,8 @@ class JVCRemote(Remote, Entity):
             cmd_handler=self.command_handler,  # type: ignore[arg-type]
         )
 
-    def map_entity_states(self, device_state: str) -> str:
-        """Map media player states to remote states."""
+    def map_entity_states(self, device_state: Any) -> RemoteStates:
+        """Map media player device states to valid remote entity states."""
         return JVC_REMOTE_STATE_MAPPING.get(device_state, RemoteStates.UNKNOWN)
 
     def get_int_param(self, param: str, params: dict[str, Any], default: int):
