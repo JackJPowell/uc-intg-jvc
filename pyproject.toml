@@ -9,5 +9,5 @@ dependencies = [
     "pyjvcprojector==2.0.1",
     "sddp-discovery-protocol>=1.5.0",
     "ucapi==0.5.2",
-    "ucapi-framework==1.8.4",
+    "ucapi-framework==1.9.0b4",
 ]

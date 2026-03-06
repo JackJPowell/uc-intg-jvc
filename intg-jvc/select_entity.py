@@ -7,19 +7,17 @@ Select entity functions for the JVC integration.
 import logging
 from typing import Any
 
-from jvcprojector.error import JvcProjectorError
-
 from const import JVCConfig, SelectConfig
 from projector import JVCProjector
 from ucapi import EntityTypes, StatusCodes
-from ucapi.select import Attributes, Commands, Select, States
+from ucapi.select import Attributes, Commands, States
 from ucapi_framework import create_entity_id
-from ucapi_framework.entity import Entity as FrameworkEntity
+from ucapi_framework.entities import SelectEntity
 
 _LOG = logging.getLogger(__name__)
 
 
-class JVCSelect(Select, FrameworkEntity):
+class JVCSelect(SelectEntity):
     """Representation of a JVC Select entity."""
 
     def __init__(
@@ -37,25 +35,23 @@ class JVCSelect(Select, FrameworkEntity):
         """
         self._device = device
         self._select_id = select_config.identifier
-        self._command_class = select_config.command_class
 
         # Set entity_id for FrameworkEntity mixin
         self._entity_id = create_entity_id(
             EntityTypes.SELECT, config_device.identifier, select_config.identifier
         )
 
-        attributes: dict[str, Any] = {
-            Attributes.STATE: States.UNAVAILABLE,
-            Attributes.CURRENT_OPTION: select_config.value or "",
-            Attributes.OPTIONS: select_config.options or [],
-        }
-
         super().__init__(
             self._entity_id,
             select_config.name,
-            attributes=attributes,
+            attributes={
+                Attributes.STATE: States.UNAVAILABLE,
+                Attributes.CURRENT_OPTION: "",
+                Attributes.OPTIONS: [],
+            },
             cmd_handler=self.select_cmd_handler,
         )
+        self.subscribe_to_device(device)
 
         _LOG.debug(
             "Created select entity: %s with %d options",
@@ -65,7 +61,7 @@ class JVCSelect(Select, FrameworkEntity):
 
     async def select_cmd_handler(
         self,
-        _entity: Select,
+        _entity: SelectEntity,
         cmd_id: str,
         params: dict[str, Any] | None,
         _websocket: Any = None,
@@ -86,19 +82,28 @@ class JVCSelect(Select, FrameworkEntity):
         match cmd_id:
             case Commands.SELECT_OPTION:
                 if params and "option" in params:
-                    return await self.select_option(params["option"])
+                    success = await self._device.select_option(
+                        self._select_id, params["option"]
+                    )
+                    return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                 return StatusCodes.BAD_REQUEST
 
             case Commands.SELECT_FIRST:
                 options = self.attributes.get(Attributes.OPTIONS, [])
                 if options:
-                    return await self.select_option(options[0])
+                    success = await self._device.select_option(
+                        self._select_id, options[0]
+                    )
+                    return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                 return StatusCodes.BAD_REQUEST
 
             case Commands.SELECT_LAST:
                 options = self.attributes.get(Attributes.OPTIONS, [])
                 if options:
-                    return await self.select_option(options[-1])
+                    success = await self._device.select_option(
+                        self._select_id, options[-1]
+                    )
+                    return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                 return StatusCodes.BAD_REQUEST
 
             case Commands.SELECT_NEXT:
@@ -108,9 +113,15 @@ class JVCSelect(Select, FrameworkEntity):
                     cycle = params.get("cycle", False) if params else False
                     current_idx = options.index(current)
                     if current_idx < len(options) - 1:
-                        return await self.select_option(options[current_idx + 1])
+                        success = await self._device.select_option(
+                            self._select_id, options[current_idx + 1]
+                        )
+                        return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                     elif cycle:
-                        return await self.select_option(options[0])
+                        success = await self._device.select_option(
+                            self._select_id, options[0]
+                        )
+                        return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                 return StatusCodes.BAD_REQUEST
 
             case Commands.SELECT_PREVIOUS:
@@ -120,70 +131,28 @@ class JVCSelect(Select, FrameworkEntity):
                     cycle = params.get("cycle", False) if params else False
                     current_idx = options.index(current)
                     if current_idx > 0:
-                        return await self.select_option(options[current_idx - 1])
+                        success = await self._device.select_option(
+                            self._select_id, options[current_idx - 1]
+                        )
+                        return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                     elif cycle:
-                        return await self.select_option(options[-1])
+                        success = await self._device.select_option(
+                            self._select_id, options[-1]
+                        )
+                        return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
                 return StatusCodes.BAD_REQUEST
 
             case _:
                 _LOG.warning("[%s] Unknown command: %s", self._select_id, cmd_id)
                 return StatusCodes.NOT_IMPLEMENTED
 
-    async def select_option(self, option: str) -> StatusCodes:
-        """Handle option selection.
-
-        Args:
-            option: The selected option value
-
-        Returns:
-            StatusCodes: SUCCESS if command sent, ERROR otherwise
-        """
-        _LOG.debug("[%s] Selecting option: %s", self._select_id, option)
-
-        try:
-            # Send operation command to projector
-            await self._device.send_command(
-                "operation",
-                cmd_class=self._command_class,
-                value=option,
-            )
-
-            # Update local state
-            self.attributes[Attributes.CURRENT_OPTION] = option
-            self.attributes[Attributes.STATE] = States.ON
-
-            _LOG.info("[%s] Successfully set to: %s", self._select_id, option)
-            return StatusCodes.OK
-
-        except JvcProjectorError as err:
-            _LOG.error(
-                "[%s] Failed to select option %s: %s",
-                self._select_id,
-                option,
-                err,
-            )
-            return StatusCodes.SERVER_ERROR
-
-    def update_value(self, value: str) -> None:
-        """Update the select value (called when sensor updates).
-
-        Args:
-            value: New value from projector
-        """
-        if value and value in self.attributes.get(Attributes.OPTIONS, []):
-            self.attributes[Attributes.CURRENT_OPTION] = value
-            self.attributes[Attributes.STATE] = States.ON
-            self.update(self.attributes)
-            _LOG.debug("[%s] Updated value to: %s", self._select_id, value)
-        elif value:
-            _LOG.warning(
-                "[%s] Received unknown value '%s', not in options list",
-                self._select_id,
-                value,
-            )
-
-    def set_unavailable(self) -> None:
-        """Mark the select as unavailable."""
-        self.attributes[Attributes.STATE] = States.UNAVAILABLE
-        self.update(self.attributes)
-        _LOG.debug("[%s] Set to unavailable", self._select_id)
+    async def sync_state(self) -> None:
+        """Sync entity state from device attributes."""
+        if self._device is None:
+            self.set_unavailable()
+            return
+        attrs = self._device.get_select_attributes(self._select_id)
+        if attrs is not None:
+            self.update(attrs)
+        else:
+            self.set_unavailable()

@@ -11,7 +11,7 @@ from const import (
     JVCConfig,
 )
 from jvcprojector import command as jvc_cmd
-from ucapi import EntityTypes, Remote, StatusCodes, media_player, remote
+from ucapi import EntityTypes, StatusCodes, media_player, remote
 from ucapi.media_player import States as MediaStates
 from ucapi.remote import Attributes, Commands, Features
 from ucapi.remote import States as RemoteStates
@@ -24,7 +24,9 @@ from ucapi.ui import (
     create_ui_icon,
     Size,
 )
-from ucapi_framework import create_entity_id, Entity
+from ucapi_framework import create_entity_id
+from ucapi_framework.entities import RemoteEntity
+from ucapi_framework.helpers import RemoteAttributes
 
 _LOG = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ JVC_REMOTE_STATE_MAPPING = {
 }
 
 
-class JVCRemote(Remote, Entity):
+class JVCRemote(RemoteEntity):
     """Representation of a JVC Remote entity."""
 
     def __init__(self, config_device: JVCConfig, device: projector.JVCProjector):
@@ -51,17 +53,26 @@ class JVCRemote(Remote, Entity):
             f"{config_device.name} Remote",
             features,
             attributes={
-                Attributes.STATE: device.state,
+                Attributes.STATE: RemoteStates.UNKNOWN,
             },
             simple_commands=[member.value for member in SimpleCommands],
             button_mapping=JVC_REMOTE_BUTTONS_MAPPING,
             ui_pages=create_ui_pages(),
             cmd_handler=self.command_handler,  # type: ignore[arg-type]
         )
+        self.subscribe_to_device(device)
 
     def map_entity_states(self, device_state: Any) -> RemoteStates:
         """Map media player device states to valid remote entity states."""
         return JVC_REMOTE_STATE_MAPPING.get(device_state, RemoteStates.UNKNOWN)
+
+    async def sync_state(self) -> None:
+        """Sync entity state from device attributes."""
+        if self._device is None:
+            self.set_unavailable()
+            return
+
+        self.update(RemoteAttributes(STATE=self.map_entity_states(self._device.state)))
 
     def get_int_param(self, param: str, params: dict[str, Any], default: int):
         """Get parameter in integer format."""
@@ -75,7 +86,7 @@ class JVCRemote(Remote, Entity):
         return default
 
     async def command_handler(
-        self, _entity: Remote, cmd_id: str, params: dict[str, Any] | None = None
+        self, _entity: RemoteEntity, cmd_id: str, params: dict[str, Any] | None = None
     ) -> StatusCodes:
         """
         Remote entity command handler.

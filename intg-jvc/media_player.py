@@ -13,10 +13,11 @@ from const import (
     SimpleCommands,
     JVCConfig,
 )
-from ucapi import MediaPlayer, media_player, EntityTypes
+from ucapi import media_player, EntityTypes
 from ucapi.media_player import DeviceClasses, Attributes
 from jvcprojector import command as jvc_cmd
-from ucapi_framework import create_entity_id, Entity as FrameworkEntity
+from ucapi_framework import create_entity_id
+from ucapi_framework.entities import MediaPlayerEntity
 
 _LOG = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ features = [
 ]
 
 
-class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
+class JVCMediaPlayer(MediaPlayerEntity):
     """Representation of a JVC MediaPlayer entity."""
 
     def __init__(self, config_device: JVCConfig, device: projector.JVCProjector):
@@ -46,9 +47,9 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
             config_device.name,
             features,
             attributes={
-                Attributes.STATE: device.state,
-                Attributes.SOURCE: device.source if device.source else "",
-                Attributes.SOURCE_LIST: device.source_list,
+                Attributes.STATE: media_player.States.UNKNOWN,
+                Attributes.SOURCE: "",
+                Attributes.SOURCE_LIST: [],
             },
             device_class=DeviceClasses.TV,
             options={
@@ -56,12 +57,13 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
                     member.value for member in SimpleCommands
                 ]
             },
-            cmd_handler=self.media_player_cmd_handler,  # type: ignore[arg-type]
+            cmd_handler=self.media_player_cmd_handler,
         )
+        self.subscribe_to_device(device)
 
     # pylint: disable=too-many-statements
     async def media_player_cmd_handler(
-        self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None
+        self, entity: MediaPlayerEntity, cmd_id: str, params: dict[str, Any] | None
     ) -> ucapi.StatusCodes:
         """
         Media-player entity command handler.
@@ -438,38 +440,9 @@ class JVCMediaPlayer(MediaPlayer, FrameworkEntity):
         _LOG.debug("Command %s executed successfully: %s", cmd_id, res)
         return ucapi.StatusCodes.OK
 
-    def update_power_state(self, state: media_player.States) -> None:
-        """Update power state.
-
-        Args:
-            state: New power state
-        """
-        self.attributes[Attributes.STATE] = state
-        self.update(self.attributes)
-        _LOG.debug("Media player power state updated to: %s", state)
-
-    def update_source(self, source: str) -> None:
-        """Update active source.
-
-        Args:
-            source: New source value
-        """
-        self.attributes[Attributes.SOURCE] = source
-        self.update(self.attributes)
-        _LOG.debug("Media player source updated to: %s", source)
-
-    def update_all(
-        self, state: media_player.States, source: str, source_list: list[str]
-    ) -> None:
-        """Update all attributes.
-
-        Args:
-            state: Power state
-            source: Active source
-            source_list: List of available sources
-        """
-        self.attributes[Attributes.STATE] = state
-        self.attributes[Attributes.SOURCE] = source
-        self.attributes[Attributes.SOURCE_LIST] = source_list
-        self.update(self.attributes)
-        _LOG.debug("Media player all attributes updated")
+    async def sync_state(self) -> None:
+        """Sync entity state from device attributes."""
+        if self._device is None:
+            self.set_unavailable()
+            return
+        self.update(self._device.get_media_player_attributes())

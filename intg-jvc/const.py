@@ -118,6 +118,11 @@ SENSORS: Final[dict[str, SensorConfig]] = {
         name="Color Profile",
         query_command=command.ColorProfile,
     ),
+    "ContentType": SensorConfig(
+        identifier="content_type",
+        name="Content Type",
+        query_command=command.ContentType,
+    ),
     "LensMemory": SensorConfig(
         identifier="lens_memory",
         name="Lens Memory",
@@ -231,5 +236,10 @@ SELECTS: Final[dict[str, SelectConfig]] = {
         identifier="installation_mode",
         name="Installation Mode",
         command_class=command.InstallationMode,
+    ),
+    "ContentType": SelectConfig(
+        identifier="content_type",
+        name="Content Type",
+        command_class=command.ContentType,
     ),
 }

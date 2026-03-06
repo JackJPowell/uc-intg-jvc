@@ -4,12 +4,18 @@ name: "Build & Draft Release"
 "on":
   push:
     tags:
-      - 'v*'
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0, without v prefix)"
+        required: true
+        type: string
 
 env:
   INTG_NAME: jvc
   # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.12
+  PYTHON_VER: 3.11.12-0.3.0
 
 jobs:
   build:
@@ -30,8 +36,12 @@ jobs:
         #Id needed for env output variable
         id: get-version-and-id
         run: |
-          # Extract version from git tag (remove 'v' prefix)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # Use manual input version if triggered by workflow_dispatch, otherwise extract from tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "DRIVER_ID=$(jq .driver_id -r driver.json)" >> $GITHUB_ENV
           # Save to Github output to later use it in Create Release job
@@ -61,13 +71,13 @@ jobs:
           mv artifacts/bin/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
           cp driver.json artifacts/
           echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
-          
+
       - name: Create upload artifact archive
         shell: bash
-        run: | 
+        run: |
           tar czvf ${{ env.ARTIFACT_NAME }}.tar.gz -C ${GITHUB_WORKSPACE}/artifacts .
           ls -lah
-          
+
       - uses: actions/upload-artifact@v4
         id: upload_artifact
         with:
@@ -75,7 +85,7 @@ jobs:
           path: ${{ env.ARTIFACT_NAME }}.tar.gz
           if-no-files-found: error
           retention-days: 3
-            
+
   docker:
     name: Build and Push Docker Image
     runs-on: ubuntu-24.04
@@ -101,7 +111,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/uc-intg-jvc
+          images: ghcr.io/${{ github.repository_owner }}/uc-intg-${{ env.INTG_NAME }}
           tags: |
             type=ref,event=tag
             type=raw,value=latest
@@ -114,15 +124,32 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-            
+
   release:
     name: Create Release
     runs-on: ubuntu-24.04
-    needs: [build, docker]
+    needs: [build]
     permissions:
       contents: write
 
     steps:
+      - name: Checkout (for CHANGELOG)
+        uses: actions/checkout@v4
+
+      - name: Extract release notes from CHANGELOG
+        id: release_notes
+        run: |
+          # Extract the content between "## Unreleased" and the next "## " heading
+          notes=$(awk '/^## Unreleased/{found=1; next} found && /^## /{exit} found{print}' CHANGELOG.md | sed '/^[[:space:]]*$/d' | sed '/^_.*_$/d')
+          if [ -z "$notes" ]; then
+            notes="No release notes provided."
+          fi
+          # Write outside the workspace root so it is not wiped by artifact extraction
+          mkdir -p /tmp/release
+          echo "$notes" > /tmp/release/release_notes.md
+          echo "Release notes:"
+          cat /tmp/release/release_notes.md
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
 
@@ -131,7 +158,7 @@ jobs:
           ls -R
           # extract tar.gz build archives from downloaded artifacts
           # (wrapped in tar from actions/upload-artifact, then extracted into a directory by actions/download-artifact)
-          for D in * 
+          for D in *
             do if [ -d "${D}" ]; then
               mv $D/* ./
             fi
@@ -141,11 +168,11 @@ jobs:
         run: |
           for filename in *.tar.gz; do echo "sha256  `sha256sum $filename`" >> ${{needs.build.outputs.driver_id}}.hash; done;
 
-      - name: Create release draft
+      - name: Create release
         uses: ncipollo/release-action@v1
         with:
           artifacts: "*.tar.gz,${{needs.build.outputs.driver_id}}.hash"
-          draft: true
-          generateReleaseNotes: true
+          draft: false
+          bodyFile: /tmp/release/release_notes.md
           artifactErrorsFailBuild: true
           tag: v${{needs.build.outputs.version}}
