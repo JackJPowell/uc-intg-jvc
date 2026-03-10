@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pyee>=9.0",
-    "pyjvcprojector==2.0.1",
+    "pyjvcprojector==2.0.2",
     "sddp-discovery-protocol>=1.5.0",
     "ucapi==0.5.2",
-    "ucapi-framework==1.9.0b4",
+    "ucapi-framework==1.9.0",
 ]
