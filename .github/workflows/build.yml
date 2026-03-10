@@ -1,5 +1,5 @@
 # Triggered by version tag creation to build a distribution binary, Docker image, and create a release draft
-name: "Build & Draft Release"
+name: "Build & Release"
 
 "on":
   push:
@@ -36,12 +36,8 @@ jobs:
         #Id needed for env output variable
         id: get-version-and-id
         run: |
-          # Use manual input version if triggered by workflow_dispatch, otherwise extract from tag
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
+          # Extract version from git tag (remove 'v' prefix)
+          VERSION=${GITHUB_REF#refs/tags/v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "DRIVER_ID=$(jq .driver_id -r driver.json)" >> $GITHUB_ENV
           # Save to Github output to later use it in Create Release job
@@ -128,27 +124,28 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-24.04
-    needs: [build]
+    needs: [build, docker]
     permissions:
       contents: write
 
     steps:
-      - name: Checkout (for CHANGELOG)
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract release notes from CHANGELOG
-        id: release_notes
+      - name: Extract changelog for this version
+        id: changelog
         run: |
-          # Extract the content between "## Unreleased" and the next "## " heading
-          notes=$(awk '/^## Unreleased/{found=1; next} found && /^## /{exit} found{print}' CHANGELOG.md | sed '/^[[:space:]]*$/d' | sed '/^_.*_$/d')
-          if [ -z "$notes" ]; then
-            notes="No release notes provided."
+          VERSION=${{ needs.build.outputs.version }}
+          # Extract the block between this version's heading and the next heading
+          NOTES=$(awk "/^## v?${VERSION}/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+          # Strip leading/trailing blank lines
+          NOTES=$(echo "$NOTES" | sed '/./,$!d' | sed -e :a -e '/^\s*$/{$d;N;ba}')
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
           fi
-          # Write outside the workspace root so it is not wiped by artifact extraction
-          mkdir -p /tmp/release
-          echo "$notes" > /tmp/release/release_notes.md
-          echo "Release notes:"
-          cat /tmp/release/release_notes.md
+          # Write to file to safely handle multi-line content
+          echo "$NOTES" > release_notes.md
+          cat release_notes.md
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -158,7 +155,7 @@ jobs:
           ls -R
           # extract tar.gz build archives from downloaded artifacts
           # (wrapped in tar from actions/upload-artifact, then extracted into a directory by actions/download-artifact)
-          for D in *
+          for D in * 
             do if [ -d "${D}" ]; then
               mv $D/* ./
             fi
@@ -173,6 +170,7 @@ jobs:
         with:
           artifacts: "*.tar.gz,${{needs.build.outputs.driver_id}}.hash"
           draft: false
-          bodyFile: /tmp/release/release_notes.md
+          bodyFile: release_notes.md
+          generateReleaseNotes: false
           artifactErrorsFailBuild: true
           tag: v${{needs.build.outputs.version}}
