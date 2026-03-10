@@ -48,7 +48,7 @@ async def main():
                 JVCSelect(cfg, dev, select_config)
                 for select_config in dev.selects.values()
             ],
-        ],  # type: ignore[arg-type]
+        ],
     )
     driver.config_manager = BaseConfigManager(
         get_config_path(driver.api.config_dir_path),
