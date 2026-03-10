@@ -9,24 +9,25 @@ from asyncio import AbstractEventLoop
 from copy import copy
 from typing import Any
 
-from const import (
-    JVCConfig,
-    SENSORS,
-    SELECTS,
-    SensorConfig,
-    SelectConfig,
-)
-from jvcprojector import command as jvc_cmd, JvcProjector
+from const import SELECTS, SENSORS, JVCConfig, SelectConfig, SensorConfig
+from jvcprojector import JvcProjector
+from jvcprojector import command as jvc_cmd
+from jvcprojector.command.base import Command as JvcCommand
+from jvcprojector.command.command import SPECIFICATIONS
 from jvcprojector.error import JvcProjectorError
-from ucapi import media_player, EntityTypes
+from ucapi import media_player
+from ucapi.select import States as SelectStates
+from ucapi.sensor import States as SensorStates
 from ucapi_framework import (
     BaseConfigManager,
-    ExternalClientDevice,
-    EntitySource,
     BaseIntegrationDriver,
-    create_entity_id,
+    ExternalClientDevice,
 )
-from ucapi_framework.helpers import MediaPlayerAttributes
+from ucapi_framework.helpers import (
+    MediaPlayerAttributes,
+    SelectAttributes,
+    SensorAttributes,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -58,16 +59,20 @@ class JVCProjector(ExternalClientDevice):
         self._projector_lock = asyncio.Lock()
         self._sensor_update_task: asyncio.Task | None = None
         self._source_list: list[str] = ["HDMI1", "HDMI2"]
-        self._active_source: str = ""
-        self._signal: str = ""
         self._capabilities: dict[str, Any] = {}
         self._capabilities_retrieved = False
 
         # Initialize empty sensor and select config dicts (metadata only, not runtime state)
-        self.sensor_configs: dict[str, SensorConfig] = {}
+        self.sensors: dict[str, SensorConfig] = {}
         self.selects: dict[str, SelectConfig] = {}
 
-        # Load capabilities from config if available and build sensors immediately
+        # Single source-of-truth state dict keyed by logical name.
+        # Reserved keys: "power" (media_player.States), "input" (str).
+        # All sensor/select IDs share the same namespace — one write updates all.
+        self._state_values: dict[str, Any] = {
+            "power": None,
+            "input": "",
+        }
         if device_config.capabilities:
             # Convert list to dict format (same as jp.capabilities() returns)
             self._capabilities = {cmd: None for cmd in device_config.capabilities}
@@ -76,12 +81,6 @@ class JVCProjector(ExternalClientDevice):
             if device_config.use_sensors:
                 self._build_sensors_from_capabilities()
             self._build_selects_from_capabilities()
-
-        self.attributes = MediaPlayerAttributes(
-            STATE=None,
-            SOURCE=None,
-            SOURCE_LIST=self._source_list,
-        )
 
     @property
     def identifier(self) -> str:
@@ -101,7 +100,7 @@ class JVCProjector(ExternalClientDevice):
     @property
     def source(self) -> str:
         """Return the current input source."""
-        return self._active_source if self._active_source else ""
+        return self._state_values.get("input") or ""
 
     @property
     def source_list(self) -> list[str]:
@@ -111,7 +110,7 @@ class JVCProjector(ExternalClientDevice):
     @property
     def state(self) -> media_player.States | None:
         """Return the current power state."""
-        return self._state
+        return self._state_values.get("power")
 
     @property
     def log_id(self) -> str:
@@ -157,8 +156,8 @@ class JVCProjector(ExternalClientDevice):
         try:
             _LOG.debug("[%s] Querying power state", self.name)
             power_str = await self._client.get(jvc_cmd.Power)
-            self._state = self._convert_power_state(str(power_str))
-            _LOG.debug("[%s] Power state: %s", self.name, self._state)
+            self._state_values["power"] = self._convert_power_state(str(power_str))
+            _LOG.debug("[%s] Power state: %s", self.name, self._state_values["power"])
         except JvcProjectorError as err:
             _LOG.error(
                 "[%s] Failed to get power state: %s",
@@ -169,7 +168,10 @@ class JVCProjector(ExternalClientDevice):
 
         # Discover and store capabilities if not already loaded from config (upgrade case)
         # Only attempt discovery if projector is ON
-        if not self._capabilities_retrieved and self._state == media_player.States.ON:
+        if (
+            not self._capabilities_retrieved
+            and self._state_values["power"] == media_player.States.ON
+        ):
             await self.discover_capabilities()
             self._store_capabilities_and_spec_in_config()
             # Only create sensor entities if use_sensors is enabled
@@ -180,7 +182,7 @@ class JVCProjector(ExternalClientDevice):
                 # Create sensor entities and register them
                 sensor_entities: list[JVCSensor] = [
                     JVCSensor(self.device_config, self, sensor_config)
-                    for sensor_config in self.sensor_configs.values()
+                    for sensor_config in self.sensors.values()
                 ]
                 self.driver.add_entities(sensor_entities)  # type:ignore[arg-type]
 
@@ -197,24 +199,17 @@ class JVCProjector(ExternalClientDevice):
                 self.driver.add_entities(select_entities)  # type: ignore[arg-type]
 
         # Get input if projector is on
-        if self._state == media_player.States.ON:
+        if self._state_values["power"] == media_player.States.ON:
             async with self._projector_lock:
                 input_value = await self._client.get(jvc_cmd.Input)
                 if input_value:
-                    self._active_source = input_value.upper()
+                    self._state_values["input"] = input_value.upper()
 
         # Update sensors in background task
         if self._sensor_update_task is None or self._sensor_update_task.done():
             self._sensor_update_task = asyncio.create_task(self._update_all_sensors())
 
-        # Update media player entity with initial state
-        media_player_entity = self._get_media_player_entity()
-        if media_player_entity:
-            media_player_entity.update_all(
-                self._state,
-                self._active_source if self._active_source else "",
-                self._source_list,
-            )
+        self.push_update()
 
     async def disconnect_client(self) -> None:
         """Disconnect from the JVC projector."""
@@ -273,13 +268,8 @@ class JVCProjector(ExternalClientDevice):
                             media_player.States.OFF,
                         ]:
                             await self._client.set(jvc_cmd.Power, jvc_cmd.Power.ON)
-                        self._state = media_player.States.ON
-                        # Update media player entity
-                        media_player_entity = self._get_media_player_entity()
-                        if media_player_entity:
-                            media_player_entity.update_power_state(
-                                media_player.States.ON
-                            )
+                        self._state_values["power"] = media_player.States.ON
+                        self.push_update()
                         # Delay sensor updates for 60 seconds to allow projector to warm up
                         asyncio.create_task(self._delayed_sensor_update(60))
                     case "powerOff":
@@ -288,42 +278,29 @@ class JVCProjector(ExternalClientDevice):
                         power_state = self._convert_power_state(str(power))
                         if power_state == media_player.States.ON:
                             await self._client.set(jvc_cmd.Power, jvc_cmd.Power.OFF)
-                        self._state = media_player.States.STANDBY
-                        # Update media player entity
-                        media_player_entity = self._get_media_player_entity()
-                        if media_player_entity:
-                            media_player_entity.update_power_state(
-                                media_player.States.STANDBY
-                            )
+                        self._state_values["power"] = media_player.States.STANDBY
+                        self.push_update()
                         await self._update_all_sensors()
                     case "powerToggle":
                         power = await self._client.get(jvc_cmd.Power)
                         # Normalize power state from API
                         power_state = self._convert_power_state(str(power))
-                        media_player_entity = self._get_media_player_entity()
                         if power_state == media_player.States.ON:
                             await self._client.set(jvc_cmd.Power, jvc_cmd.Power.OFF)
-                            self._state = media_player.States.STANDBY
-                            if media_player_entity:
-                                media_player_entity.update_power_state(
-                                    media_player.States.STANDBY
-                                )
+                            self._state_values["power"] = media_player.States.STANDBY
+                            self.push_update()
                             await self._update_all_sensors()
                         elif power_state in [
                             media_player.States.STANDBY,
                             media_player.States.OFF,
                         ]:
                             await self._client.set(jvc_cmd.Power, jvc_cmd.Power.ON)
-                            self._state = media_player.States.ON
-                            if media_player_entity:
-                                media_player_entity.update_power_state(
-                                    media_player.States.ON
-                                )
+                            self._state_values["power"] = media_player.States.ON
+                            self.push_update()
                             asyncio.create_task(self._delayed_sensor_update(60))
                         else:
-                            self._state = power_state
-                            if media_player_entity:
-                                media_player_entity.update_power_state(power_state)
+                            self._state_values["power"] = power_state
+                            self.push_update()
 
                     case "setInput":
                         remote_cmd = jvc_cmd.Remote.HDMI1  # Default to HDMI1
@@ -331,12 +308,8 @@ class JVCProjector(ExternalClientDevice):
                         if source.upper() == "HDMI2":
                             remote_cmd = jvc_cmd.Remote.HDMI2
                         await self._client.set(jvc_cmd.Input, remote_cmd)
-                        self._active_source = kwargs["source"].upper()
-                        # Update media player entity
-                        media_player_entity = self._get_media_player_entity()
-                        if media_player_entity:
-                            media_player_entity.update_source(self._active_source)
-                        await self.update_sensor("input", value=self._active_source)
+                        self._state_values["input"] = kwargs["source"].upper()
+                        self.push_update()
 
                     case "remote":
                         code = kwargs.get("code")
@@ -366,14 +339,12 @@ class JVCProjector(ExternalClientDevice):
 
                             await self._client.set(cmd_class, value)
 
-                            # Find and update both sensor and select entities with the same ID
-                            for sensor_id, sensor_config in self.sensor_configs.items():
+                            # Single write covers sensor, select, and any other entity
+                            # sharing the same key in _state_values
+                            for sensor_id, sensor_config in self.sensors.items():
                                 if sensor_config.query_command == cmd_class:
-                                    # Update sensor entity
-                                    if self._device_config.use_sensors:
-                                        await self.update_sensor(sensor_id, value=value)
-                                    # Update select entity (same ID as sensor)
-                                    await self.update_select(sensor_id, value=value)
+                                    self._state_values[sensor_id] = str(value)
+                                    self.push_update()
                                     break
 
                     case _:
@@ -395,54 +366,6 @@ class JVCProjector(ExternalClientDevice):
                 err,
             )
             raise
-
-    def _get_sensor_entity(self, sensor_id: str):
-        """Get sensor entity by sensor_id.
-
-        Args:
-            sensor_id: Sensor identifier (e.g., 'picture_mode')
-
-        Returns:
-            JVCSensor entity or None if not found
-        """
-        if not self.driver:
-            return None
-
-        entity_id = create_entity_id(
-            EntityTypes.SENSOR, self._device_config.identifier, sensor_id
-        )
-        return self.driver.get_configured_entity(entity_id)
-
-    def _get_select_entity(self, select_id: str):
-        """Get select entity by select_id.
-
-        Args:
-            select_id: Select identifier (e.g., 'picture_mode_select')
-
-        Returns:
-            JVCSelect entity or None if not found
-        """
-        if not self.driver:
-            return None
-
-        entity_id = create_entity_id(
-            EntityTypes.SELECT, self._device_config.identifier, select_id
-        )
-        return self.driver.get_configured_entity(entity_id)
-
-    def _get_media_player_entity(self):
-        """Get the media player entity.
-
-        Returns:
-            JVCMediaPlayer entity or None if not found
-        """
-        if not self.driver:
-            return None
-
-        entity_id = create_entity_id(
-            EntityTypes.MEDIA_PLAYER, self._device_config.identifier
-        )
-        return self.driver.get_configured_entity(entity_id)
 
     async def discover_capabilities(self) -> None:
         """Discover projector capabilities and build dynamic sensor/select lists.
@@ -496,17 +419,10 @@ class JVCProjector(ExternalClientDevice):
                 )
                 new_sensors[sensor_id] = sensor_config
 
-        self.sensor_configs = new_sensors
+        self.sensors = new_sensors
 
     def _build_selects_from_capabilities(self) -> None:
         """Filter SELECTS dict based on projector capabilities and populate options."""
-        if not self._device_config.spec:
-            _LOG.warning(
-                "[%s] Cannot build selects: spec not available in config",
-                self.name,
-            )
-            return
-
         new_selects = {}
 
         # Add selects for discovered capabilities
@@ -546,51 +462,93 @@ class JVCProjector(ExternalClientDevice):
         self.selects = new_selects
 
     def _extract_command_options(self, command_class: Any) -> list[str]:
-        """Extract valid options from a command's describe() output.
+        """Extract valid options from a command class for the connected projector's spec.
+
+        Resolves command parameters statically using the stored spec — no live
+        client connection required.
 
         Args:
             command_class: The command class (e.g., command.PictureMode)
 
         Returns:
-            List of valid option strings for this command
+            List of valid option strings for this command, or empty list if
+            no spec is available or the command is not supported by this model.
         """
+        spec_name = self._device_config.spec
+        if not spec_name:
+            _LOG.debug(
+                "[%s] No spec stored yet; cannot resolve options for %s",
+                self.name,
+                command_class.__name__,
+            )
+            return []
+
+        # Strip any model suffix (spec string may be e.g. "CS20241-B8A1")
+        base_spec_name = spec_name.split("-")[0]
+        spec = next((s for s in SPECIFICATIONS if s.name == base_spec_name), None)
+        if spec is None:
+            _LOG.warning(
+                "[%s] Unknown spec '%s'; cannot resolve options for %s",
+                self.name,
+                spec_name,
+                command_class.__name__,
+            )
+            return []
+
         try:
-            description = self._client.describe(command_class)
-            if not description or "parameter" not in description:
+            getattr(command_class, "_resolve")(spec)
+            resolved = getattr(command_class, "_parameter", None)
+            if not resolved or not resolved.supported():
                 return []
-
-            param = description["parameter"]
-
-            # MapParameter returns {"read": {...}, "write": {...}}
+            description = command_class.describe()
+            param = description.get("parameter", {})
             if isinstance(param, dict) and "write" in param:
-                # Return the human-readable values (not the hex codes)
                 return list(param["write"].values())
-
             return []
-
-        except JvcProjectorError:
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            _LOG.warning(
+                "[%s] Failed to resolve options for %s: %s",
+                self.name,
+                command_class.__name__,
+                err,
+            )
             return []
+        finally:
+            # Unload so the resolved _parameter doesn't bleed across device instances
+            # (Command._parameter is a class-level attribute shared globally)
+            JvcCommand.unload()
 
-    async def update_select(self, select_id: str, value: Any = None) -> None:
-        """Update a specific select value.
+    async def select_option(self, select_id: str, option: str) -> bool:
+        """Send a select option command to the projector and update state.
 
         Args:
             select_id: The select identifier (e.g., 'picture_mode')
-            value: Value to set on the select entity
-        """
-        if not value or select_id not in self.selects:
-            return
+            option: The option value to select
 
-        # Find and update the select entity
-        entity = self._get_select_entity(select_id)
-        if entity:
-            entity.update_value(value)  # type:ignore[attr-defined]
-            _LOG.debug(
-                "[%s] Select '%s' value set to %s",
+        Returns:
+            True if the command succeeded, False otherwise.
+        """
+        if select_id not in self.selects:
+            _LOG.warning("[%s] Unknown select '%s'", self.name, select_id)
+            return False
+
+        select_config = self.selects[select_id]
+        try:
+            async with self._projector_lock:
+                await self._client.set(select_config.command_class, option)
+            self._state_values[select_id] = option
+            self.push_update()
+            _LOG.info("[%s] Select '%s' set to: %s", self.name, select_id, option)
+            return True
+        except JvcProjectorError as err:
+            _LOG.error(
+                "[%s] Failed to set select '%s' to '%s': %s",
                 self.name,
                 select_id,
-                value,
+                option,
+                err,
             )
+            return False
 
     def _store_capabilities_and_spec_in_config(self) -> None:
         """Store discovered capabilities, spec, and model in config for future use."""
@@ -617,7 +575,7 @@ class JVCProjector(ExternalClientDevice):
                 async with self._projector_lock:
                     # Query all sensors that have query commands
                     # Note: sensors are only created for supported commands, so no need to check supports_command
-                    for sensor_id, sensor_config in self.sensor_configs.items():
+                    for sensor_id, sensor_config in self.sensors.items():
                         if sensor_config.query_command:
                             try:
                                 # Use new get() API with command classes
@@ -625,13 +583,9 @@ class JVCProjector(ExternalClientDevice):
                                     sensor_config.query_command
                                 )
 
-                                # Find and update the sensor entity
-                                entity = self._get_sensor_entity(sensor_id)
-                                if entity:
-                                    entity.update_value(value)
-
-                                # Update corresponding select entity if it exists (same ID)
-                                await self.update_select(sensor_id, value=value)
+                                # Single write — all entities (sensor, select, media player)
+                                # that share this key will read the updated value
+                                self._state_values[sensor_id] = str(value)
 
                                 await asyncio.sleep(0.25)
                             except JvcProjectorError as err:
@@ -649,23 +603,8 @@ class JVCProjector(ExternalClientDevice):
                     self.state,
                 )
 
-            # Always update sensor entity states (even when projector is off)
-            # This marks sensors as UNAVAILABLE when projector is off
-            if self.driver:
-                sensor_entities = self.driver.filter_entities_by_type(
-                    EntityTypes.SENSOR, EntitySource.CONFIGURED
-                )
-                for entity in sensor_entities:
-                    if self.state != media_player.States.ON:
-                        entity.set_unavailable()  # type:ignore[attr-defined]
-
-                # Also update select entities
-                select_entities = self.driver.filter_entities_by_type(
-                    EntityTypes.SELECT, EntitySource.CONFIGURED
-                )
-                for entity in select_entities:
-                    if self.state != media_player.States.ON:
-                        entity.set_unavailable()  # type:ignore[attr-defined]
+            # Push a single update to notify all subscribed entities
+            self.push_update()
 
         except JvcProjectorError as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
@@ -688,68 +627,62 @@ class JVCProjector(ExternalClientDevice):
         _LOG.debug("[%s] Starting delayed sensor update", self.name)
         await self._update_all_sensors()
 
-    async def update_sensor(self, sensor_key: str, value: Any = None) -> None:
-        """Update a specific sensor value and trigger entity refresh.
+    def get_media_player_attributes(self) -> MediaPlayerAttributes:
+        """Return current media player attributes built from _state_values."""
+        return MediaPlayerAttributes(
+            STATE=self._state_values.get("power"),
+            SOURCE=self._state_values.get("input", ""),
+            SOURCE_LIST=self._source_list,
+        )
+
+    def get_sensor_attributes(self, sensor_id: str) -> SensorAttributes | None:
+        """Return current sensor attributes for the given sensor_id.
 
         Args:
-            sensor_key: The sensor identifier (e.g., 'picture_mode', 'low_latency')
-            value: Optional pre-assigned value to use instead of querying the projector
+            sensor_id: Sensor identifier (e.g., 'picture_mode')
+
+        Returns:
+            SensorAttributes or None if sensor_id is not known.
         """
-        try:
-            # Get sensor config
-            sensor_config = self.sensor_configs.get(sensor_key)
-            if not sensor_config:
-                _LOG.warning(
-                    "[%s] Sensor '%s' not found",
-                    self.name,
-                    sensor_key,
-                )
-                return
 
-            # Find the sensor entity
-            entity = self._get_sensor_entity(sensor_key)
-            if not entity:
-                _LOG.warning(
-                    "[%s] Sensor entity '%s' not found",
-                    self.name,
-                    sensor_key,
-                )
-                return
+        if sensor_id not in self.sensors:
+            return None
+        sensor_config = self.sensors[sensor_id]
+        value = self._state_values.get(sensor_id)
+        state = (
+            SensorStates.ON
+            if value is not None
+            and self._state_values.get("power") == media_player.States.ON
+            else SensorStates.UNAVAILABLE
+        )
+        return SensorAttributes(
+            STATE=state,
+            VALUE=value if value is not None else sensor_config.default,
+            UNIT=sensor_config.unit,
+        )
 
-            # Use provided value if available, otherwise query the projector
-            if value is not None:
-                # Use the assigned value directly (no network call)
-                entity.update_value(value)
-                _LOG.debug(
-                    "[%s] Sensor '%s' value set to %s (assigned)",
-                    self.name,
-                    sensor_key,
-                    value,
-                )
-            elif sensor_config.query_command and self.state == media_player.States.ON:
-                # Only query value if projector is ON and no value was provided
-                # Acquire lock to serialize access to projector
-                async with self._projector_lock:
-                    # Query the specific sensor value and update entity
-                    queried_value = await self._client.get(sensor_config.query_command)
-                    entity.update_value(queried_value)
-                _LOG.debug(
-                    "[%s] Sensor '%s' value updated (queried)",
-                    self.name,
-                    sensor_key,
-                )
-            else:
-                _LOG.debug(
-                    "[%s] Skipping sensor '%s' value query - projector state is %s",
-                    self.name,
-                    sensor_key,
-                    self.state,
-                )
+    def get_select_attributes(self, select_id: str) -> SelectAttributes | None:
+        """Return current select attributes for the given select_id.
 
-        except JvcProjectorError as err:  # noqa: BLE001
-            _LOG.error(
-                "[%s] Error updating sensor '%s': %s", self.name, sensor_key, err
-            )
+        Args:
+            select_id: Select identifier (e.g., 'picture_mode')
+
+        Returns:
+            SelectAttributes or None if select_id is not known.
+        """
+
+        if select_id not in self.selects:
+            return None
+        state = (
+            SelectStates.ON
+            if self._state_values.get("power") == media_player.States.ON
+            else SelectStates.UNAVAILABLE
+        )
+        return SelectAttributes(
+            STATE=state,
+            CURRENT_OPTION=self._state_values.get(select_id, ""),
+            OPTIONS=self.selects[select_id].options or [],
+        )
 
     def _convert_power_state(self, power: str) -> media_player.States:
         """Convert JVC power state string to ucapi media_player.States."""

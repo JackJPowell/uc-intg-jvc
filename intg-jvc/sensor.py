@@ -10,14 +10,14 @@ from typing import Any
 from const import JVCConfig, SensorConfig
 from projector import JVCProjector
 from ucapi import EntityTypes
-from ucapi.sensor import Attributes, DeviceClasses, Sensor, States
+from ucapi.sensor import Attributes, DeviceClasses, States
 from ucapi_framework import create_entity_id
-from ucapi_framework.entity import Entity as FrameworkEntity
+from ucapi_framework.entities import SensorEntity
 
 _LOG = logging.getLogger(__name__)
 
 
-class JVCSensor(Sensor, FrameworkEntity):
+class JVCSensor(SensorEntity):
     """Representation of a JVC Sensor entity."""
 
     def __init__(
@@ -58,22 +58,15 @@ class JVCSensor(Sensor, FrameworkEntity):
             attributes=attributes,
             device_class=DeviceClasses.CUSTOM,
         )
+        self.subscribe_to_device(device)
 
-    def update_value(self, value: Any) -> None:
-        """Update sensor value (entity owns state).
-
-        Args:
-            value: New value from projector
-        """
-        self.attributes[Attributes.VALUE] = value
-        self.attributes[Attributes.STATE] = States.ON
-        self.update(self.attributes)
-
-        _LOG.debug("[%s] Updated value to: %s", self._sensor_id, value)
-
-    def set_unavailable(self) -> None:
-        """Mark sensor unavailable."""
-        self.attributes[Attributes.STATE] = States.UNAVAILABLE
-        self.update(self.attributes)
-
-        _LOG.debug("[%s] Set to unavailable", self._sensor_id)
+    async def sync_state(self) -> None:
+        """Sync entity state from device attributes."""
+        if self._device is None:
+            self.set_unavailable()
+            return
+        attrs = self._device.get_sensor_attributes(self._sensor_id)
+        if attrs is None:
+            self.set_unavailable()
+        else:
+            self.update(attrs)

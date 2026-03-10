@@ -132,24 +132,36 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
             return self.get_manual_entry_form()
 
         try:
+            _LOG.debug("Creating JvcProjector instance for %s (password set: %s)", address, bool(password))
             jvc = JvcProjector(address, password=password)
             try:
+                _LOG.debug("Attempting jvc.connect() to %s", address)
                 await jvc.connect()
+                _LOG.debug("jvc.connect() succeeded")
+
                 # Get MAC address, model, and spec from connected projector
+                _LOG.debug("Requesting MAC address")
                 mac = await jvc.get(command.MacAddress)
+                _LOG.debug("MAC address: %s", mac)
+
                 model = jvc.model
+                _LOG.debug("Model: %s", model)
+
                 spec = jvc.spec
+                _LOG.debug("Spec: %s", spec)
+
                 # Get capabilities to store in config
+                _LOG.debug("Requesting capabilities")
                 capabilities_dict = jvc.capabilities()
                 capabilities_list = (
                     list(capabilities_dict.keys()) if capabilities_dict else []
                 )
+                _LOG.debug("Capabilities: %d commands", len(capabilities_list))
             finally:
+                _LOG.debug("Disconnecting from %s", address)
                 await jvc.disconnect()
+                _LOG.debug("Disconnected")
             _LOG.debug("JVC Projector MAC: %s, Model: %s, Spec: %s", mac, model, spec)
-            _LOG.debug(
-                "JVC Projector Capabilities: %d commands", len(capabilities_list)
-            )
 
             return JVCConfig(
                 identifier=mac if mac else model,
@@ -163,8 +175,10 @@ class JVCSetupFlow(BaseSetupFlow[JVCConfig]):
             )
 
         except JvcProjectorError as ex:
-            _LOG.error("Unable to connect at Address: %s. Exception: %s", address, ex)
-            _LOG.info(
-                "Please check if you entered the correct address of the projector"
+            _LOG.error(
+                "JvcProjectorError during setup for %s: %s",
+                address,
+                ex,
+                exc_info=True,
             )
             return SetupError(IntegrationSetupError.CONNECTION_REFUSED)

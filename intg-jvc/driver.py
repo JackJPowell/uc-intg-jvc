@@ -14,6 +14,7 @@ from discover import JVCProjectorDiscovery
 from media_player import JVCMediaPlayer
 from projector import JVCProjector
 from remote import JVCRemote
+from select_entity import JVCSelect
 from sensor import JVCSensor
 from setup import JVCSetupFlow
 from ucapi_framework import BaseConfigManager, BaseIntegrationDriver, get_config_path
@@ -32,6 +33,7 @@ async def main():
     logging.getLogger("projector").setLevel(level)
     logging.getLogger("sensor").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
+    logging.getLogger("select_entity").setLevel(level)
 
     driver = BaseIntegrationDriver(
         device_class=JVCProjector,
@@ -41,6 +43,10 @@ async def main():
             lambda cfg, dev: [
                 JVCSensor(cfg, dev, sensor_config)
                 for sensor_config in dev.sensors.values()
+            ],
+            lambda cfg, dev: [
+                JVCSelect(cfg, dev, select_config)
+                for select_config in dev.selects.values()
             ],
         ],
     )
