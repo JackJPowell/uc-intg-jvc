@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.3.1 - 2026-03-11
+
+### Fixed
+
+- Corrected a bug where select entity would trigger connection timeouts
+
+### Changed
+
+- Updated JVC projector library to extend support for additional projector models
+
+---
+
 ## v1.3.0 - 2026-03-09
 
 #### Select Entities
