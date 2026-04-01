@@ -432,6 +432,36 @@ class JVCMediaPlayer(MediaPlayerEntity):
                         cmd_class=jvc_cmd.Anamorphic,
                         value=jvc_cmd.Anamorphic.D,
                     )
+                case SimpleCommands.CONTENT_TYPE_AUTO:
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.ContentType,
+                        value=jvc_cmd.ContentType.AUTO,
+                    )
+                case SimpleCommands.CONTENT_TYPE_SDR:
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.ContentType,
+                        value=jvc_cmd.ContentType.SDR,
+                    )
+                case SimpleCommands.CONTENT_TYPE_HDR10:
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.ContentType,
+                        value=jvc_cmd.ContentType.HDR10,
+                    )
+                case SimpleCommands.CONTENT_TYPE_HDR10P:
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.ContentType,
+                        value=jvc_cmd.ContentType.HDR10_PLUS,
+                    )
+                case SimpleCommands.CONTENT_TYPE_HLG:
+                    res = await jvc.send_command(
+                        "operation",
+                        cmd_class=jvc_cmd.ContentType,
+                        value=jvc_cmd.ContentType.HLG,
+                    )
 
         except Exception as ex:  # pylint: disable=broad-except
             _LOG.error("Error executing command %s: %s", cmd_id, ex)
