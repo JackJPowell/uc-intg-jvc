@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.3.4 - 2026-07-02
+
+### Added
+
+- Added a `Hide` simple command that sends the JVC remote `HIDE` command from both media player and remote entities.
+
+### Fixed
+
+- Skipped sensor refreshes when no sensor entities are configured on the Remote.
+- Limited sensor refreshes to only the configured sensor entities instead of querying every supported sensor.
+- Increased the timeout for low latency sensor checks to avoid read timeout warnings on slower projector responses.
+
+---
+
 ## v1.3.1 - 2026-03-11
 
 ### Fixed
