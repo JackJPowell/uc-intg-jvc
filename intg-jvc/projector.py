@@ -15,13 +15,15 @@ from jvcprojector import command as jvc_cmd
 from jvcprojector.command.base import Command as JvcCommand
 from jvcprojector.command.command import SPECIFICATIONS
 from jvcprojector.error import JvcProjectorError
-from ucapi import media_player
+from ucapi import EntityTypes, media_player
 from ucapi.select import States as SelectStates
 from ucapi.sensor import States as SensorStates
 from ucapi_framework import (
     BaseConfigManager,
     BaseIntegrationDriver,
+    EntitySource,
     ExternalClientDevice,
+    create_entity_id,
 )
 from ucapi_framework.helpers import (
     MediaPlayerAttributes,
@@ -205,8 +207,13 @@ class JVCProjector(ExternalClientDevice):
                 if input_value:
                     self._state_values["input"] = input_value.upper()
 
-        # Update sensors in background task
-        if self._sensor_update_task is None or self._sensor_update_task.done():
+        # Update configured sensors in background task
+        if (
+            self._has_configured_sensors()
+            and (
+                self._sensor_update_task is None or self._sensor_update_task.done()
+            )
+        ):
             self._sensor_update_task = asyncio.create_task(self._update_all_sensors())
 
         self.push_update()
@@ -569,6 +576,13 @@ class JVCProjector(ExternalClientDevice):
     async def _update_all_sensors(self) -> None:
         """Update all sensor values with delays between queries."""
         try:
+            if not self._has_configured_sensors():
+                _LOG.debug(
+                    "[%s] Skipping sensor value queries - no configured sensors",
+                    self.name,
+                )
+                return
+
             # Only query sensor values if projector is on
             if self.state == media_player.States.ON:
                 # Acquire lock to serialize access to projector
@@ -578,10 +592,7 @@ class JVCProjector(ExternalClientDevice):
                     for sensor_id, sensor_config in self.sensors.items():
                         if sensor_config.query_command:
                             try:
-                                # Use new get() API with command classes
-                                value = await self._client.get(
-                                    sensor_config.query_command
-                                )
+                                value = await self._get_sensor_value(sensor_config)
 
                                 # Single write — all entities (sensor, select, media player)
                                 # that share this key will read the updated value
@@ -611,6 +622,48 @@ class JVCProjector(ExternalClientDevice):
         finally:
             # Clear the task reference when done
             self._sensor_update_task = None
+
+    def _has_configured_sensors(self) -> bool:
+        """Return whether this projector has any configured sensor entities."""
+        if not self.driver:
+            return bool(self.sensors)
+
+        configured_sensors = self.driver.filter_entities_by_type(
+            EntityTypes.SENSOR,
+            source=EntitySource.CONFIGURED,
+        )
+        sensor_entity_ids = {
+            create_entity_id(
+                EntityTypes.SENSOR,
+                self.identifier,
+                sensor_config.identifier,
+            )
+            for sensor_config in self.sensors.values()
+        }
+
+        return any(entity.id in sensor_entity_ids for entity in configured_sensors)
+
+    async def _get_sensor_value(self, sensor_config: SensorConfig) -> str:
+        """Query a sensor value, applying a timeout override when configured."""
+        if sensor_config.query_timeout is None:
+            return str(await self._client.get(sensor_config.query_command))
+
+        device = getattr(self._client, "_device", None)
+        conn = getattr(device, "_conn", None)
+        if conn is None or not hasattr(conn, "_timeout"):
+            return str(
+                await asyncio.wait_for(
+                    self._client.get(sensor_config.query_command),
+                    timeout=sensor_config.query_timeout,
+                )
+            )
+
+        original_timeout = conn._timeout
+        conn._timeout = sensor_config.query_timeout
+        try:
+            return str(await self._client.get(sensor_config.query_command))
+        finally:
+            conn._timeout = original_timeout
 
     async def _delayed_sensor_update(self, delay: int) -> None:
         """Update sensors after a delay.

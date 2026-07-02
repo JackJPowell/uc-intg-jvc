@@ -39,6 +39,8 @@ class SensorConfig:
     """Human-readable name for the sensor."""
     query_command: Any = None
     """Query command class to retrieve sensor value (e.g., command.PictureMode)."""
+    query_timeout: float | None = None
+    """Optional timeout override for slow sensor queries."""
     unit: str | None = None
     """Unit of measurement (optional)."""
     default: str = ""
@@ -81,6 +83,7 @@ SENSORS: Final[dict[str, SensorConfig]] = {
         identifier="low_latency",
         name="Low Latency",
         query_command=command.LowLatencyMode,
+        query_timeout=10.0,
     ),
     "Mask": SensorConfig(
         identifier="mask",
@@ -197,6 +200,7 @@ class SimpleCommands(StrEnum):
     REMOTE_COLOR_TEMP = "Color Temp"
     REMOTE_3D_FORMAT = "3D Format"
     REMOTE_PIC_ADJ = "Picture Adjust"
+    REMOTE_HIDE = "Hide"
 
 
 # Map of command class names to select configurations

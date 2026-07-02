@@ -235,6 +235,10 @@ class JVCRemote(RemoteEntity):
                         res = await jvc.send_command(
                             "remote", code=jvc_cmd.Remote.PICTURE_ADJUST
                         )
+                    case SimpleCommands.REMOTE_HIDE | "REMOTE_HIDE":
+                        res = await jvc.send_command(
+                            "remote", code=jvc_cmd.Remote.HIDE
+                        )
                     case SimpleCommands.LENS_MEMORY_1 | "LENS_MEMORY_1":
                         # Lens memory commands take a long time - run in background to avoid timeout
                         asyncio.create_task(
