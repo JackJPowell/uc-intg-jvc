@@ -585,11 +585,12 @@ class JVCProjector(ExternalClientDevice):
 
             # Only query sensor values if projector is on
             if self.state == media_player.States.ON:
+                configured_sensors = self._get_configured_sensors()
                 # Acquire lock to serialize access to projector
                 async with self._projector_lock:
-                    # Query all sensors that have query commands
+                    # Query configured sensors that have query commands
                     # Note: sensors are only created for supported commands, so no need to check supports_command
-                    for sensor_id, sensor_config in self.sensors.items():
+                    for sensor_id, sensor_config in configured_sensors.items():
                         if sensor_config.query_command:
                             try:
                                 value = await self._get_sensor_value(sensor_config)
@@ -625,8 +626,12 @@ class JVCProjector(ExternalClientDevice):
 
     def _has_configured_sensors(self) -> bool:
         """Return whether this projector has any configured sensor entities."""
+        return bool(self._get_configured_sensors())
+
+    def _get_configured_sensors(self) -> dict[str, SensorConfig]:
+        """Return this projector's sensor configs that are configured on the Remote."""
         if not self.driver:
-            return bool(self.sensors)
+            return self.sensors
 
         configured_sensors = self.driver.filter_entities_by_type(
             EntityTypes.SENSOR,
@@ -641,7 +646,12 @@ class JVCProjector(ExternalClientDevice):
             for sensor_config in self.sensors.values()
         }
 
-        return any(entity.id in sensor_entity_ids for entity in configured_sensors)
+        configured_entity_ids = {entity.id for entity in configured_sensors}
+        return {
+            sensor_id: sensor_config
+            for sensor_id, sensor_config in self.sensors.items()
+            if sensor_entity_ids[sensor_id] in configured_entity_ids
+        }
 
     async def _get_sensor_value(self, sensor_config: SensorConfig) -> str:
         """Query a sensor value, applying a timeout override when configured."""
