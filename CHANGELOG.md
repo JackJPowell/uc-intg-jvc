@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.3.5 - 2026-07-05
+
+### Fixed
+
+- Fixed configured sensor filtering so delayed sensor refreshes no longer fail with a `'set' object is not subscriptable` error.
+- Switched HDMI source selection to JVC remote input commands to avoid read timeouts from the `Input (IP)` setter path.
+- Hardened sensor refresh tasks so unexpected sensor update errors are logged instead of surfacing as unhandled task exceptions.
+
+---
+
 ## v1.3.4 - 2026-07-02
 
 ### Added

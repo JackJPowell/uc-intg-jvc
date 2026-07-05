@@ -310,12 +310,12 @@ class JVCProjector(ExternalClientDevice):
                             self.push_update()
 
                     case "setInput":
+                        source = (kwargs.get("source") or "HDMI1").upper()
                         remote_cmd = jvc_cmd.Remote.HDMI1  # Default to HDMI1
-                        source = kwargs.get("source", "")
-                        if source.upper() == "HDMI2":
+                        if source == "HDMI2":
                             remote_cmd = jvc_cmd.Remote.HDMI2
-                        await self._client.set(jvc_cmd.Input, remote_cmd)
-                        self._state_values["input"] = kwargs["source"].upper()
+                        await self._client.remote(remote_cmd)
+                        self._state_values["input"] = source
                         self.push_update()
 
                     case "remote":
@@ -618,7 +618,7 @@ class JVCProjector(ExternalClientDevice):
             # Push a single update to notify all subscribed entities
             self.push_update()
 
-        except JvcProjectorError as err:  # noqa: BLE001
+        except Exception as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
         finally:
             # Clear the task reference when done
@@ -638,12 +638,12 @@ class JVCProjector(ExternalClientDevice):
             source=EntitySource.CONFIGURED,
         )
         sensor_entity_ids = {
-            create_entity_id(
+            sensor_id: create_entity_id(
                 EntityTypes.SENSOR,
                 self.identifier,
                 sensor_config.identifier,
             )
-            for sensor_config in self.sensors.values()
+            for sensor_id, sensor_config in self.sensors.items()
         }
 
         configured_entity_ids = {entity.id for entity in configured_sensors}
