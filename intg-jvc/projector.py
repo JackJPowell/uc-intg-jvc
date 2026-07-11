@@ -33,6 +33,10 @@ from ucapi_framework.helpers import (
 
 _LOG = logging.getLogger(__name__)
 
+SENSOR_POLL_INTERVAL = 30
+SOURCE_SETTLE_DELAY = 5
+WARMUP_SENSOR_DELAY = 60
+
 
 class JVCProjector(ExternalClientDevice):
     """Representing a JVC Projector Device."""
@@ -59,7 +63,9 @@ class JVCProjector(ExternalClientDevice):
             driver=driver,
         )
         self._projector_lock = asyncio.Lock()
-        self._sensor_update_task: asyncio.Task | None = None
+        self._sensor_poll_task: asyncio.Task | None = None
+        self._source_update_task: asyncio.Task | None = None
+        self._warmup_update_task: asyncio.Task | None = None
         self._source_list: list[str] = ["HDMI1", "HDMI2"]
         self._capabilities: dict[str, Any] = {}
         self._capabilities_retrieved = False
@@ -207,27 +213,23 @@ class JVCProjector(ExternalClientDevice):
                 if input_value:
                     self._state_values["input"] = input_value.upper()
 
-        # Update configured sensors in background task
+        # Keep configured sensors current while the projector is connected.
         if (
             self._has_configured_sensors()
-            and (
-                self._sensor_update_task is None or self._sensor_update_task.done()
-            )
+            and (self._sensor_poll_task is None or self._sensor_poll_task.done())
         ):
-            self._sensor_update_task = asyncio.create_task(self._update_all_sensors())
+            self._sensor_poll_task = asyncio.create_task(self._poll_sensors())
 
         self.push_update()
 
     async def disconnect_client(self) -> None:
         """Disconnect from the JVC projector."""
-        # Stop sensor update task if running
-        if self._sensor_update_task and not self._sensor_update_task.done():
-            self._sensor_update_task.cancel()
-            try:
-                await self._sensor_update_task
-            except asyncio.CancelledError:
-                pass
-            self._sensor_update_task = None
+        await self._cancel_task(self._sensor_poll_task)
+        await self._cancel_task(self._source_update_task)
+        await self._cancel_task(self._warmup_update_task)
+        self._sensor_poll_task = None
+        self._source_update_task = None
+        self._warmup_update_task = None
 
         # JvcLib doesn't have an explicit disconnect method
         # The connection is managed internally
@@ -278,7 +280,7 @@ class JVCProjector(ExternalClientDevice):
                         self._state_values["power"] = media_player.States.ON
                         self.push_update()
                         # Delay sensor updates for 60 seconds to allow projector to warm up
-                        asyncio.create_task(self._delayed_sensor_update(60))
+                        self._schedule_warmup_sensor_update()
                     case "powerOff":
                         power = await self._client.get(jvc_cmd.Power)
                         # Normalize power state from API
@@ -304,7 +306,7 @@ class JVCProjector(ExternalClientDevice):
                             await self._client.set(jvc_cmd.Power, jvc_cmd.Power.ON)
                             self._state_values["power"] = media_player.States.ON
                             self.push_update()
-                            asyncio.create_task(self._delayed_sensor_update(60))
+                            self._schedule_warmup_sensor_update()
                         else:
                             self._state_values["power"] = power_state
                             self.push_update()
@@ -317,6 +319,7 @@ class JVCProjector(ExternalClientDevice):
                         await self._client.remote(remote_cmd)
                         self._state_values["input"] = source
                         self.push_update()
+                        self._schedule_source_update()
 
                     case "remote":
                         code = kwargs.get("code")
@@ -620,9 +623,16 @@ class JVCProjector(ExternalClientDevice):
 
         except Exception as err:  # noqa: BLE001
             _LOG.error("[%s] Error updating sensors: %s", self.name, err)
-        finally:
-            # Clear the task reference when done
-            self._sensor_update_task = None
+
+    async def _poll_sensors(self) -> None:
+        """Periodically refresh configured sensor values."""
+        try:
+            while True:
+                await self._update_all_sensors()
+                await asyncio.sleep(SENSOR_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            _LOG.debug("[%s] Sensor polling stopped", self.name)
+            raise
 
     def _has_configured_sensors(self) -> bool:
         """Return whether this projector has any configured sensor entities."""
@@ -689,6 +699,29 @@ class JVCProjector(ExternalClientDevice):
         await asyncio.sleep(delay)
         _LOG.debug("[%s] Starting delayed sensor update", self.name)
         await self._update_all_sensors()
+
+    def _schedule_source_update(self) -> None:
+        """Refresh signal information after an input change has settled."""
+        if self._source_update_task and not self._source_update_task.done():
+            self._source_update_task.cancel()
+        self._source_update_task = asyncio.create_task(self._delayed_sensor_update(SOURCE_SETTLE_DELAY))
+
+    def _schedule_warmup_sensor_update(self) -> None:
+        """Refresh sensors after the projector has warmed up."""
+        if self._warmup_update_task and not self._warmup_update_task.done():
+            self._warmup_update_task.cancel()
+        self._warmup_update_task = asyncio.create_task(self._delayed_sensor_update(WARMUP_SENSOR_DELAY))
+
+    @staticmethod
+    async def _cancel_task(task: asyncio.Task | None) -> None:
+        """Cancel and await a managed background task."""
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     def get_media_player_attributes(self) -> MediaPlayerAttributes:
         """Return current media player attributes built from _state_values."""
