@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.3.6 - 2026-07-11
+
+### Fixed
+
+- Added recurring sensor polling so signal information stays current when the projector's input signal changes.
+- Added a delayed sensor refresh after input selection to allow the projector's signal information to settle.
+
+---
+
 ## v1.3.5 - 2026-07-05
 
 ### Fixed
